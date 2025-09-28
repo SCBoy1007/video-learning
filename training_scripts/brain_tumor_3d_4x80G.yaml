@@ -59,6 +59,6 @@ trainer:
   n_gpus_per_node: 4  # 4 GPUs per node
   nnodes: 1
   save_freq: 100
-  test_freq: 2  # Validate every 2 episodes
+  test_freq: 458  # Validate every 2 episodes (229 steps/episode × 2)
   val_before_train: true  # Validate before training starts
   val_only: false

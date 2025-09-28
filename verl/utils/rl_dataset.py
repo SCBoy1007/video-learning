@@ -96,11 +96,15 @@ class RLHFDataset(Dataset):
             for i, path in enumerate(dataset_paths):
                 print(f"  Loading dataset {i+1}/{len(dataset_paths)}: {path}")
                 dataset = self._load_single_dataset(path)
+                # Add root_path field to each sample for correct video path resolution
+                dataset = dataset.map(lambda x: {**x, "root_path": path})
                 datasets.append(dataset)
                 print(f"    Loaded {len(dataset)} samples")
 
             self.dataset = concatenate_datasets(datasets)
             print(f"Combined dataset: {len(self.dataset)} total samples")
+            # Store None as data_path since we now use per-sample root_path
+            self.data_path = None
         else:
             # Single dataset (original logic)
             self.dataset = self._load_single_dataset(data_path)
@@ -196,8 +200,11 @@ class RLHFDataset(Dataset):
         # Handle video data
         if "video_path" in row_dict:
             import os
-            # Construct video file path relative to data_path
-            video_file_path = os.path.join(self.data_path, row_dict["video_path"])
+            # Construct video file path using per-sample root_path or fallback to data_path
+            root_path = row_dict.get("root_path", self.data_path)
+            if root_path is None:
+                raise ValueError(f"No root_path found for sample and data_path is None. Sample keys: {list(row_dict.keys())}")
+            video_file_path = os.path.join(root_path, row_dict["video_path"])
             raw_prompt = prompt.replace("<video>", "<|vision_start|><|video_pad|><|vision_end|>")
 
             # Use video processor to handle video file
