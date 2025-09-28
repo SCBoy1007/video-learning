@@ -17,7 +17,7 @@ import torch
 from transformers import PreTrainedTokenizer
 
 from verl import DataProto
-from verl.utils.reward_score import math_compute_score, r1v_compute_score, seg_compute_score, seg_strict_compute_score, vision_reasoner_compute_score
+from verl.utils.reward_score import math_compute_score, r1v_compute_score, seg_compute_score, seg_strict_compute_score, vision_reasoner_compute_score, brain_tumor_3d_compute_score
 
 
 class CustomRewardManager:
@@ -34,6 +34,8 @@ class CustomRewardManager:
             self.compute_score = seg_strict_compute_score
         elif compute_score == "vision_reasoner":
             self.compute_score = vision_reasoner_compute_score
+        elif compute_score == "brain_tumor_3d":
+            self.compute_score = brain_tumor_3d_compute_score
         else:
             raise NotImplementedError()
 

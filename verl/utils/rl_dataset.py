@@ -78,6 +78,7 @@ class RLHFDataset(Dataset):
         max_pixels=None,
         min_pixels=None,
     ):
+        self.data_path = data_path  # Save data_path for video file resolution
         self.tokenizer = tokenizer
         self.processor = processor
         self.prompt_key = prompt_key
@@ -100,13 +101,20 @@ class RLHFDataset(Dataset):
         #     "<answer>{Answer}</answer>"
         ################ Old Version ################
         
-        self.user_prompt = "<image>\n" \
-            "Please find \"{Question}\" with bboxs and points." \
-            "Compare the difference between object(s) and find the most closely matched object(s)." \
-            "Output the thinking process in <think> </think> and final answer in <answer> </answer> tags." \
-            "Output the bbox(es) and point(s) inside the interested object(s) in JSON format." \
-            "i.e., <think> thinking process here </think>" \
-            "<answer>{Answer}</answer>"
+        # Check if this is video data or image data based on data_path
+        if any(path in data_path for path in ['video', 'MRI', 'BraTS']):
+            # Video prompt for brain tumor detection
+            self.user_prompt = "<video>\n" \
+                "{Question}"
+        else:
+            # Original image prompt
+            self.user_prompt = "<image>\n" \
+                "Please find \"{Question}\" with bboxs and points." \
+                "Compare the difference between object(s) and find the most closely matched object(s)." \
+                "Output the thinking process in <think> </think> and final answer in <answer> </answer> tags." \
+                "Output the bbox(es) and point(s) inside the interested object(s) in JSON format." \
+                "i.e., <think> thinking process here </think>" \
+                "<answer>{Answer}</answer>"
 
     def __len__(self):
         return len(self.dataset)
@@ -125,17 +133,59 @@ class RLHFDataset(Dataset):
         # ]
         ################ Old Version ################
         
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": self.user_prompt.format(
-                Question=row_dict["problem"].lower().strip("."),
-                Answer="[{\"bbox_2d\": [10,100,200,210], \"point_2d\": [30,110]}, {\"bbox_2d\": [225,296,706,786], \"point_2d\": [302,410]}]"
-            )},
-        ]
+        # Build messages based on data type
+        if "video_path" in row_dict:
+            # Brain tumor video data
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": self.user_prompt.format(
+                    Question=row_dict["problem"]
+                )},
+            ]
+        else:
+            # Original image data
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": self.user_prompt.format(
+                    Question=row_dict["problem"].lower().strip("."),
+                    Answer="[{\"bbox_2d\": [10,100,200,210], \"point_2d\": [30,110]}, {\"bbox_2d\": [225,296,706,786], \"point_2d\": [302,410]}]"
+                )},
+            ]
         prompt = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 
-        if "image" in row_dict:
+        # Handle video data
+        if "video_path" in row_dict:
+            import os
+            # Construct video file path relative to data_path
+            video_file_path = os.path.join(self.data_path, row_dict["video_path"])
+            raw_prompt = prompt.replace("<video>", "<|vision_start|><|video_pad|><|vision_end|>")
+
+            # Use video processor to handle video file
+            video_inputs = self.processor(videos=[video_file_path], return_tensors="pt")
+            video_grid_thw = video_inputs.get("video_grid_thw", None)
+            row_dict.update(video_inputs)
+
+            if video_grid_thw is not None:
+                merge_length = self.processor.image_processor.merge_size**2
+                index = 0
+                while "<video>" in prompt:
+                    prompt = prompt.replace(
+                        "<video>",
+                        "<|vision_start|>"
+                        + "<|placeholder|>" * (video_grid_thw[index].prod() // merge_length)
+                        + "<|vision_end|>",
+                        1,
+                    )
+                    index += 1
+
+                # Use video token (similar to image token)
+                video_token = getattr(self.processor, 'video_token', getattr(self.processor, 'image_token', '<|video_pad|>'))
+                prompt = prompt.replace("<|placeholder|>", video_token)
+
+        # Handle image data (original logic)
+        elif "image" in row_dict:
             row_dict["images"] = [row_dict["image"]]
+
         if "images" in row_dict:  # expand image token
             raw_prompt = prompt.replace("<image>", "<|vision_start|><|image_pad|><|vision_end|>")
             row_dict["images"] = [
@@ -159,7 +209,9 @@ class RLHFDataset(Dataset):
                     index += 1
 
                 prompt = prompt.replace("<|placeholder|>", self.processor.image_token)
-        else:
+
+        # Set raw_prompt if no visual content
+        if "video_path" not in row_dict and "images" not in row_dict:
             raw_prompt = prompt
 
         input_ids, attention_mask = verl_F.tokenize_and_postprocess_data(
@@ -171,7 +223,15 @@ class RLHFDataset(Dataset):
             truncation=self.truncation,
         )
 
-        if "images" in row_dict:
+        # Calculate position IDs based on content type
+        if "video_path" in row_dict:
+            position_ids = get_rope_index(
+                self.processor,
+                input_ids=input_ids,
+                video_grid_thw=video_grid_thw,
+                attention_mask=attention_mask,
+            )  # (3, seq_len)
+        elif "images" in row_dict:
             position_ids = get_rope_index(
                 self.processor,
                 input_ids=input_ids,
