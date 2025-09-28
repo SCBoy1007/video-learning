@@ -17,7 +17,7 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
 import torch
-from datasets import load_dataset, load_from_disk
+from datasets import load_dataset, load_from_disk, concatenate_datasets
 from PIL import Image
 from PIL.Image import Image as ImageObject
 from torch.utils.data import Dataset
@@ -88,8 +88,22 @@ class RLHFDataset(Dataset):
         self.max_pixels = max_pixels
         self.min_pixels = min_pixels
 
-        #self.dataset = load_dataset(data_path)['train']
-        self.dataset = load_from_disk(data_path)['train'] # you can load from disk if you have already downloaded the dataset
+        # Support multiple datasets separated by comma
+        if ',' in data_path:
+            dataset_paths = [path.strip() for path in data_path.split(',')]
+            datasets = []
+            print(f"Loading {len(dataset_paths)} datasets...")
+            for i, path in enumerate(dataset_paths):
+                print(f"  Loading dataset {i+1}/{len(dataset_paths)}: {path}")
+                dataset = self._load_single_dataset(path)
+                datasets.append(dataset)
+                print(f"    Loaded {len(dataset)} samples")
+
+            self.dataset = concatenate_datasets(datasets)
+            print(f"Combined dataset: {len(self.dataset)} total samples")
+        else:
+            # Single dataset (original logic)
+            self.dataset = self._load_single_dataset(data_path)
         
         ################ Old Version ################
         # self.user_prompt = "<image>" \
@@ -115,6 +129,32 @@ class RLHFDataset(Dataset):
                 "Output the bbox(es) and point(s) inside the interested object(s) in JSON format." \
                 "i.e., <think> thinking process here </think>" \
                 "<answer>{Answer}</answer>"
+
+    def _load_single_dataset(self, data_path: str):
+        """
+        Load a single dataset, handling both DatasetDict and direct Dataset formats
+        """
+        import os
+
+        try:
+            # Try loading as DatasetDict first (original logic)
+            dataset_dict = load_from_disk(data_path)
+            if hasattr(dataset_dict, 'keys') and 'train' in dataset_dict:
+                return dataset_dict['train']
+            else:
+                # If it's already a Dataset, return it directly
+                return dataset_dict
+        except Exception as e1:
+            # If that fails, try loading path/train as a Dataset
+            train_path = os.path.join(data_path, 'train')
+            try:
+                return load_from_disk(train_path)
+            except Exception as e2:
+                raise ValueError(
+                    f"Failed to load dataset from {data_path}. "
+                    f"Tried both DatasetDict format (error: {e1}) "
+                    f"and Dataset format at {train_path} (error: {e2})"
+                )
 
     def __len__(self):
         return len(self.dataset)

@@ -1,6 +1,6 @@
 data:
   train_files: None  # Will be overridden in training script
-  val_files: None
+  val_files: None   # Will be overridden in training script
   prompt_key: problem
   max_prompt_length: 1300
   max_response_length: 2000
@@ -53,12 +53,12 @@ worker:
     compute_score: brain_tumor_3d
 
 trainer:
-  total_episodes: 1
+  total_episodes: 15  # Increased for proper RL training
   logger: ["console", "wandb"]
   project_name: brain_tumor_3d_4x80G
   n_gpus_per_node: 4  # 4 GPUs per node
   nnodes: 1
   save_freq: 100
-  test_freq: 100000
-  val_before_train: false
+  test_freq: 2  # Validate every 2 episodes
+  val_before_train: true  # Validate before training starts
   val_only: false
