@@ -32,16 +32,16 @@ class DatasetCoordinateFixer:
                 'scale_factors': [252/240, 252/240, 1.0]
             },
             'BraTS_GLI_TrainingData_video': {
-                'original_shape': [182, 218, 182],
-                'video_shape': [196, 224, 182],
-                'video_size': [784, 224],  # 4模态拼接
-                'scale_factors': [196/182, 224/218, 1.0]
+                'original_shape': [182, 218, 182],  # [height, width, depth]
+                'video_shape': [224, 196, 182],     # [height, width, depth]
+                'video_size': [784, 224],           # [total_width, height] 4模态拼接
+                'scale_factors': [224/182, 196/218, 1.0]  # [height_scale, width_scale, depth_scale]
             },
             'BraTS_GLI_TrainingData_Additional_video': {
-                'original_shape': [182, 218, 182],
-                'video_shape': [196, 224, 182],
-                'video_size': [784, 224],  # 4模态拼接
-                'scale_factors': [196/182, 224/218, 1.0]
+                'original_shape': [182, 218, 182],  # [height, width, depth]
+                'video_shape': [224, 196, 182],     # [height, width, depth]
+                'video_size': [784, 224],           # [total_width, height] 4模态拼接
+                'scale_factors': [224/182, 196/218, 1.0]  # [height_scale, width_scale, depth_scale]
             }
         }
 
@@ -68,22 +68,54 @@ class DatasetCoordinateFixer:
             print(f"❌ 备份失败: {e}")
             return False
 
+    def get_scale_factors(self, dataset_name: str, sample_data: dict) -> List[float]:
+        """根据样本数据动态计算缩放系数"""
+        config = self.dataset_configs[dataset_name]
+
+        # 尝试从样本的data_shape字段获取原始尺寸
+        if 'data_shape' in sample_data:
+            try:
+                data_shape_str = sample_data['data_shape']
+                if isinstance(data_shape_str, str):
+                    # 解析字符串形式的data_shape，如 "[182, 218, 182]"
+                    data_shape = eval(data_shape_str)
+                else:
+                    data_shape = data_shape_str
+
+                if len(data_shape) >= 3:
+                    original_height, original_width, original_depth = data_shape[:3]
+
+                    # 计算动态缩放系数
+                    if 'BraTS' in dataset_name:
+                        # BraTS: 高度→224, 宽度→196
+                        scale_factors = [224/original_height, 196/original_width, 1.0]
+                    else:
+                        # MSD: 方形缩放
+                        scale_factors = [252/original_height, 252/original_width, 1.0]
+
+                    return scale_factors
+            except:
+                pass
+
+        # 回退到预设缩放系数
+        return config['scale_factors']
+
     def convert_bbox_coordinates(self, bbox: List[float], scale_factors: List[float]) -> List[int]:
         """转换3D边界框坐标"""
         if len(bbox) != 6:
             raise ValueError(f"Invalid bbox format: {bbox}")
 
-        # [x1, y1, z1, x2, y2, z2] 格式
+        # [x1, y1, z1, x2, y2, z2] 格式，注意：x对应height，y对应width
         converted = [
-            int(bbox[0] * scale_factors[0]),  # x1
-            int(bbox[1] * scale_factors[1]),  # y1
-            int(bbox[2] * scale_factors[2]),  # z1
-            int(bbox[3] * scale_factors[0]),  # x2
-            int(bbox[4] * scale_factors[1]),  # y2
-            int(bbox[5] * scale_factors[2])   # z2
+            round(bbox[0] * scale_factors[0]),  # x1 (height)
+            round(bbox[1] * scale_factors[1]),  # y1 (width)
+            round(bbox[2] * scale_factors[2]),  # z1 (depth)
+            round(bbox[3] * scale_factors[0]),  # x2 (height)
+            round(bbox[4] * scale_factors[1]),  # y2 (width)
+            round(bbox[5] * scale_factors[2])   # z2 (depth)
         ]
 
-        return converted
+        return [int(x) for x in converted]
 
     def convert_dataset_coordinates(self, dataset_name: str) -> bool:
         """转换单个数据集的坐标"""
@@ -117,6 +149,9 @@ class DatasetCoordinateFixer:
             def convert_sample_coordinates(example):
                 """转换单个样本的坐标"""
                 try:
+                    # 动态计算缩放系数
+                    actual_scale_factors = self.get_scale_factors(dataset_name, example)
+
                     # 解析solution
                     solution = json.loads(example['solution'])
                     if not isinstance(solution, list) or len(solution) == 0:
@@ -125,17 +160,30 @@ class DatasetCoordinateFixer:
                     original_bbox = solution[0]['bbox_3d'].copy()
 
                     # 转换bbox坐标
-                    converted_bbox = self.convert_bbox_coordinates(original_bbox, scale_factors)
+                    converted_bbox = self.convert_bbox_coordinates(original_bbox, actual_scale_factors)
                     solution[0]['bbox_3d'] = converted_bbox
 
                     # 更新solution
                     example['solution'] = json.dumps(solution)
 
+                    # 同步更新其他bbox字段（如果存在）
+                    if 'tumor_bbox_3d' in example:
+                        try:
+                            if isinstance(example['tumor_bbox_3d'], str):
+                                tumor_bbox = eval(example['tumor_bbox_3d'])
+                            else:
+                                tumor_bbox = example['tumor_bbox_3d']
+
+                            converted_tumor_bbox = self.convert_bbox_coordinates(tumor_bbox, actual_scale_factors)
+                            example['tumor_bbox_3d'] = str(converted_tumor_bbox)
+                        except:
+                            pass
+
                     # 添加元数据
                     example['coordinate_system'] = 'video_pixels'
                     example['original_shape'] = str(config['original_shape'])
                     example['video_shape'] = str(config['video_shape'])
-                    example['scale_factors'] = str(scale_factors)
+                    example['scale_factors'] = str(actual_scale_factors)
 
                     # 记录统计信息
                     original_volume = (
