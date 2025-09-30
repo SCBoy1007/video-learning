@@ -1,236 +1,226 @@
-# Seg-Zero: Reasoning-Chain Guided  Segmentation via Cognitive Reinforcement
+# Video-Learning: 3D Medical Image Analysis with Vision-Language Models
 
-The repo is the official implement of **"[Seg-Zero: Reasoning-Chain Guided  Segmentation via Cognitive Reinforcement](https://arxiv.org/abs/2503.06520)"**.   
-The repo is also the official training code of **"[VisionReasoner: Unified Visual Perception and Reasoning via Reinforcement Learning](https://arxiv.org/pdf/2505.12081)"**.  
+This repository is a **research fork** of [Seg-Zero](https://github.com/dvlab-research/Seg-Zero) adapted for **3D brain tumor detection** using video-based vision-language models and reinforcement learning.
 
-Paper: [📖 Seg-Zero](https://arxiv.org/pdf/2503.06520)  [📖 VisionReasoner](https://arxiv.org/pdf/2505.12081)    
-HuggingFace Daily: [🤗 Seg-Zero](https://huggingface.co/papers/2503.06520)  
-Data: [🤗 RefCOCOg-9K](https://huggingface.co/datasets/Ricky06662/refCOCOg_9k_840) 
-[🤗 VisionReasoner-MultiObjects-7K](https://huggingface.co/datasets/Ricky06662/VisionReasoner_multi_object_7k_840)  
-Model: [🤗 Seg-Zero-7B](https://huggingface.co/Ricky06662/Seg-Zero-7B)  [🤗 VisionReasoner-7B](https://huggingface.co/Ricky06662/VisionReasoner-7B)   
-Relative Link: [VisionReasoner![[code]](https://img.shields.io/github/stars/dvlab-research/VisionReasoner)](https://github.com/dvlab-research/VisionReasoner)     
+## Project Overview
 
-Overview of Seg-Zero:
+**Video-Learning** applies the GRPO (Group Relative Policy Optimization) algorithm to train Qwen2.5-VL models for 3D medical imaging tasks. Instead of segmentation masks, the model predicts structured outputs including 3D bounding boxes, peak slices, and tumor volume ratios.
 
-<div align=center>
-<img width="98%" src="assets/overview.png"/>
-</div>
+### Key Adaptations from Seg-Zero:
 
-Seg-Zero demonstrates following features:
-1. Seg-Zero exhibits emergent test-time reasoning ability. It generates a reasoning chain before producing the final segmentation mask. 
-2. Seg-Zero is trained exclusively using reinforcement learning, without any explicit supervised reasoning data.
-3. Compared to supervised fine-tuning, our Seg-Zero achieves superior performance on both in-domain and out-of-domain data.
+1. **Task**: Image segmentation → **3D brain tumor detection**
+2. **Input**: 2D images → **Multi-frame medical videos** (4-modality MRI concatenation)
+3. **Output**: Segmentation masks → **Structured JSON** with:
+   - `bbox_3d`: 3D bounding box coordinates `[x1, y1, z1, x2, y2, z2]`
+   - `peak_slice`: Peak tumor slice index
+   - `tumor_ratio`: Tumor volume ratio
+4. **Datasets**: RefCOCOg/ReasonSeg → **BraTS 2024 & MSD Brain Tumor MRI**
+5. **Reward Function**: IoU-based segmentation rewards → **3D IoU + multi-metric rewards**
 
-**Highlight Code Features**:
-1. This code is based on the [EasyR1](https://github.com/hiyouga/EasyR1) and [veRL](https://github.com/volcengine/verl), which supports model split during sampling and is more GPU memory friendly.
-2. Supporting both Qwen2-VL and Qwen2.5-VL series models.
-3. Already implementing commonly used rewards in Object Detection and Object Segmentation, including IoU reward and L1 reward. 
+## Architecture
 
-
-## News
-
-[May 17th, 2025] 🔥 We release [VisionReasoner](https://github.com/dvlab-research/VisionReasoner)! VisionReasoner supports multi-objects and multi-tasks.  
-[March 11th, 2025] 🔥 [Paper](https://arxiv.org/abs/2503.06520) is coming!   
-[March 8th, 2025] 🔥 Seg-Zero is coming! We have released the code and training data.
-
-## !!! Attention !!!
-> [!TIP]
-> This operation is risky, please make sure you have backed up the code if you make any changes.  
-
-We made a major update in May. We now support multi-object segmentation. If you'd like to use the previous single-object segmentation, please use the following command to revert to the old version.  
-```bash
-git reset --hard 77f9ea5887ec7e6abf398ed3cb483c65631c82b7
-```
-
-## Contents
-- [Model](#model)
-- [Examples](#examples)
-- [Installation](#installation)
-- [Inference](#inference)
-- [Evaluation](#evaluation)
-- [Training](#training)
-- [Build Your Data](#build-your-own-training-data-optional)
-- [Citation](#citation)
-- [Acknowledgement](#acknowledgement)
-
-
-
-## Model
-<div align=center>
-<img width="98%" src="assets/pipeline.png"/>
-</div>
-
-Seg-Zero employs a decoupled architecture, including a reasoning model and segmentation model. We manually design a sophiscated reward mechanism that integrates both the format and accuracy rewards.
-
-
-## Examples
-
-<div align=center>
-<img width="98%" src="assets/examples.png"/>
-</div>
-
+- **Base Model**: Qwen2.5-VL-7B-Instruct
+- **Training Framework**: veRL (Volcano Engine Reinforcement Learning)
+- **Algorithm**: GRPO with custom 3D medical imaging reward functions
+- **Hardware**: Optimized for 4×A100-80GB GPUs (single-GPU inference, TP=1)
 
 ## Installation
 
 ```bash
-git clone https://github.com/dvlab-research/Seg-Zero.git
-cd Seg-Zero
-conda create -n visionreasoner python=3.12
-conda activate visionreasoner
+git clone https://github.com/SCBoy1007/video-learning.git
+cd video-learning
+conda create -n vl python=3.10
+conda activate vl
 pip install torch==2.6.0 torchvision==0.21.0
 pip install -e .
 ```
 
-
-## Inference
-Download pretrained models using the following scripts:
-```bash
-mkdir pretrained_models
-cd pretrained_models
-git lfs install
-git clone https://huggingface.co/Ricky06662/VisionReasoner-7B
-```
-
-> [!TIP]
-> If you encounter issues with connecting to Hugging Face, consider using `export HF_ENDPOINT=https://hf-mirror.com`.
-
-Then run inference using: 
-```bash
-python inference_scripts/infer_multi_object.py
-```
-The default question is 
-> "What can I have if I'm thirsty?"
-
-You will get the thinking process in command line, like:
-
-> "The question asks for items that can be consumed if one is thirsty. In the image, there are two glasses that appear to contain beverages, which are the most likely candidates for something to drink. The other items, such as the salad, fruit platter, and sandwich, are not drinks and are not suitable for quenching thirst."
-
-And the mask will be presented in **inference_scripts** folder. 
-
-<div align=center>
-<img width="98%" src="assets/test_output_multiobject.png"/>
-</div>
-
-You can also provide your own image_path and text by:
-```bash
-python inference_scripts/infer_multi_object.py --image_path "your_image_path" --text "your question text"
-```
-
-## Evaluation  
-
-Evaluation Data: [🤗 ReasonSeg-Test](https://huggingface.co/datasets/Ricky06662/ReasonSeg_test)  [🤗 ReasonSeg-Val](https://huggingface.co/datasets/Ricky06662/ReasonSeg_val)   
-
-```bash
-bash evaluation_scripts/eval_reasonseg_visionreasoner.sh
-```  
-Adjusting '--batch_size' in the bash scripts based on your GPU. And you will see the gIoU in your command line.  
-<div align=center>
-<img width="98%" src="assets/val_results.png"/>
-</div> 
-
-> [!NOTE]
-> Results in VisionReasoner are evaluated within one checkpoint.  We recommand you to [VisionReasoner](https://github.com/dvlab-research/VisionReasoner) for evaluation on more tasks and more benchmarks.
-
-> [!NOTE]
-> However, in Seg-Zero, the best results on different benchmark are evaluated using different checkpoint. We just evaluate all available checkpoints and write down their value.  For someone who may care about the performance, we suggest you can evaluate all benchmark within one model and compare the value (of our released checkpoint) in your environment.
-
 ## Training
 
-### 1. GRPO Training  
+### Data Preparation
 
-> [!NOTE]
-> The recommanded training requirement for 7B model is a 4x80G GPUs server or a 8x46G GPUs server.   
+The project uses video representations of 3D MRI scans:
+- **BraTS 2024 GLI Training Data**: 1,251 cases
+- **MSD Brain Tumor Dataset (Task01)**: 484 cases
+- **Video format**: 4-modality concatenation (T1C, T1N, T2F, T2W) as frames
 
-Training Data: [🤗 MultiObject-1K](https://huggingface.co/datasets/Ricky06662/VisionReasoner_multi_object_1k_840)  [🤗 MultiObject-7K](https://huggingface.co/datasets/Ricky06662/VisionReasoner_multi_object_7k_840)   
-Download dataset using this script: 
-```bash
-python training_scripts/download_dataset.py
+Videos and annotations should be placed in:
+```
+data/
+├── BraTS_GLI_TrainingData_video/
+├── MSD_T1_MRI_video/
+└── BraTS_GLI_TrainingData_Additional_video/  # Validation set
 ```
 
-> [!TIP]
-> Try resize the image and re-calculate the corresponding bbox/point coordinates if you have lower GPU memory. Remeber changing the corresponding resize_size in evaluation and inference.    
+Each dataset includes:
+- `.mp4` video files (normalized medical imaging frames)
+- Arrow format annotations with ground truth 3D bounding boxes
 
-Download pretrained models using the following scripts:
+### Model Training (4×A100-80GB)
+
 ```bash
-mkdir pretrained_models
-cd pretrained_models
-git lfs install
-git clone https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct
+# The model will automatically download from HuggingFace on first run
+bash training_scripts/run_brain_tumor_3d_4x80G.sh
 ```
 
-Start training using this script:
+**Key Configuration** (optimized for 4-GPU setup):
+- `tensor_parallel_size: 1` (single-GPU inference, no TP overhead)
+- `rollout.n: 8` (8 GRPO samples per prompt)
+- `gpu_memory_utilization: 0.6` (conservative memory usage)
+- `micro_batch_size: 4` per device (global batch size: 16)
+
+### Training Monitoring
+
 ```bash
-bash training_scripts/run_visionreasoner_7b_4x80G.sh
-```  
-(Optional) Or you can use: 
-```bash
-bash training_scripts/run_visionreasoner_7b_8x46G.sh
+# Monitor GPU usage
+watch -n 1 nvidia-smi
+
+# View logs (if running in background)
+tail -f train_4x80G.log
 ```
 
-You can try change the following hyper-parameters if you have a large GPU memory.
-```bash
-worker.actor.micro_batch_size_per_device_for_update=1 or 2 or 4 or 8 or 16 \
-worker.actor.micro_batch_size_per_device_for_experience=1 or2 or 4 or 8 or 16 \
+Logs are automatically sent to **Weights & Biases** (project: `brain_tumor_3d_4x80G`).
+
+## Reward Function
+
+The custom reward function evaluates predictions across multiple dimensions (max score: 5.5):
+
+1. **Format Reward** (1.0): Valid JSON structure
+2. **3D IoU Reward** (1.5): Bounding box overlap
+   - IoU > 0.7: 1.5 points
+   - IoU > 0.5: 1.0 points
+   - IoU > 0.3: 0.5 points
+3. **Peak Slice Reward** (1.0): Accuracy of peak tumor slice
+   - Error ≤3: 1.0 points
+   - Error ≤5: 0.7 points
+   - Error ≤10: 0.3 points
+4. **Tumor Ratio Reward** (1.0): Volume estimation accuracy
+   - Error ≤10%: 1.0 points
+   - Error ≤20%: 0.7 points
+   - Error ≤30%: 0.3 points
+5. **Completeness Reward** (0.5): All required fields present
+6. **Non-repetition Reward** (0.5): Output quality check
+
+See implementation: [`verl/utils/reward_score/brain_tumor_3d.py`](verl/utils/reward_score/brain_tumor_3d.py)
+
+## Coordinate System
+
+**Critical**: The training pipeline uses **video pixel coordinates**, not original NIfTI voxel coordinates.
+
+- Videos are resized during generation (e.g., BraTS: 182×218×155 → 224×196×155)
+- All bounding box annotations are **pre-converted** to video pixel space
+- Conversion script: [`data/fix_dataset_coordinates.py`](data/fix_dataset_coordinates.py)
+
+## Project Structure
+
 ```
-If your GPU has less memory, you can change the following config. The number is depend on your GPU memory.
-```bash
-worker.rollout.tensor_parallel_size=[your number between 1-4]
-worker.rollout.gpu_memory_utilization=[your number between 0-1]
-worker.rollout.n=[your number between 2-32]
+video-learning/
+├── verl/                          # Modified veRL framework
+│   ├── utils/
+│   │   ├── reward_score/
+│   │   │   └── brain_tumor_3d.py # Custom 3D tumor reward function
+│   │   └── rl_dataset.py          # Multi-dataset loading (fixed)
+│   └── workers/                   # FSDP + vLLM workers
+├── training_scripts/
+│   ├── brain_tumor_3d_4x80G.yaml  # 4-GPU training config
+│   └── run_brain_tumor_3d_4x80G.sh # Training launch script
+├── data/                          # Dataset directory (not in git)
+│   ├── fix_dataset_coordinates.py # Coordinate conversion tool
+│   └── [video datasets...]
+└── requirements.txt               # Python dependencies (SAM2 removed)
 ```
 
-(Optional) If you have 8x140G GPUs, you can try: 
+## Key Differences from Original Seg-Zero
+
+| Aspect | Seg-Zero | Video-Learning |
+|--------|----------|----------------|
+| Task | 2D referring segmentation | 3D tumor detection |
+| Input | Single images | Multi-frame videos (4 modalities) |
+| Output | Segmentation masks (via SAM2) | Structured JSON predictions |
+| Datasets | RefCOCOg, ReasonSeg | BraTS 2024, MSD Brain Tumor |
+| Reward | Mask IoU | 3D bbox IoU + multi-metrics |
+| Dependencies | Requires SAM2 | Pure vision-language (SAM2 removed) |
+| Coordinate Space | Image pixels | Video frame coordinates |
+
+## Hardware Requirements
+
+**Recommended**:
+- 4×A100-80GB GPUs
+- 256GB+ RAM (for data loading)
+- 500GB+ storage (for video datasets)
+
+**Memory Profile**:
+- Rollout (inference): ~28GB per GPU
+- Actor (training): ~15GB per GPU (with parameter offloading)
+
+## Git Workflow
+
+This is a **research repository** with frequent updates. Typical workflow:
+
 ```bash
-bash training_scripts/run_visionreasoner_7b.sh
+# Local development (Mac/Windows)
+git add <files>
+git commit -m "description"
+git push origin master
+
+# Server deployment (Linux)
+cd ~/Downloads/video-learning
+git pull
+dos2unix training_scripts/*.sh  # Fix line endings if needed
+bash training_scripts/run_brain_tumor_3d_4x80G.sh
 ```
 
-### 2. Merge Checkpoint in Hugging Face Format
+## Recent Major Changes
 
+- **2025-09-30**: Optimized 4-GPU config (TP=2 → TP=1, removed SAM2 dependency)
+- **2025-09-29**: Fixed coordinate system bug (axis mapping correction)
+- **2025-09-22**: Implemented 3D brain tumor detection reward function
+- **2025-09-21**: Initial fork from Seg-Zero, multi-dataset support
+
+See [commit history](https://github.com/SCBoy1007/video-learning/commits/master) for details.
+
+## Troubleshooting
+
+### Line Ending Issues (Windows/Mac → Linux)
 ```bash
-python3 training_scripts/model_merger.py --local_dir [path_to_your_actor_checkpoint]
+dos2unix training_scripts/*.sh
 ```
 
+### Model Download Issues
+```bash
+# If HuggingFace is slow, use mirror
+export HF_ENDPOINT=https://hf-mirror.com
+```
 
-## Build Your Own Training Data (Optional)
-Please refer to our training data preparation [toturial](prepare_dataset/training_data_prepare_toturial.ipynb).
+### Video Playback Issues on Mac
+Mac QuickTime may show green screens for FFmpeg-encoded videos. This **does not affect training** (which uses OpenCV/FFmpeg decoding). Use VLC player to verify videos on Mac.
 
-## The GRPO Algorithm
+## Acknowledgements
 
-<div align=center>
-<img width="48%" src="assets/rl_sample.png"/>
-</div>
-
-Seg-Zero generates several samples, calculates the rewards and then optimizes towards samples that achieve higher rewards.
-
-> [!TIP]
-> To learn more about the GRPO algorithm, you can refer to [Hugging Face's blog](https://huggingface.co/docs/trl/v0.15.2/en/grpo_trainer).
-
+This project is built upon:
+- **[Seg-Zero](https://github.com/dvlab-research/Seg-Zero)** - Original GRPO-based vision reasoning framework
+- **[veRL](https://github.com/volcengine/verl)** - Efficient reinforcement learning framework
+- **[Qwen2.5-VL](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct)** - Vision-language foundation model
+- **[BraTS 2024](https://www.synapse.org/brats2024)** - Brain tumor segmentation challenge data
+- **[Medical Segmentation Decathlon](http://medicaldecathlon.com/)** - MSD brain tumor dataset
 
 ## Citation
 
+If you use this codebase, please cite the original Seg-Zero paper:
+
 ```bibtex
 @article{liu2025segzero,
-  title        = {Seg-Zero: Reasoning-Chain Guided  Segmentation via Cognitive Reinforcement},
+  title        = {Seg-Zero: Reasoning-Chain Guided Segmentation via Cognitive Reinforcement},
   author       = {Liu, Yuqi and Peng, Bohao and Zhong, Zhisheng and Yue, Zihao and Lu, Fanbin and Yu, Bei and Jia, Jiaya},
   journal      = {arXiv preprint arXiv:2503.06520},
   year         = {2025}
 }
-
-@article{liu2025visionreasoner,
-  title        = {VisionReasoner: Unified Visual Perception and Reasoning via Reinforcement Learning},
-  author       = {Liu, Yuqi and Qu, Tianyuan and Zhong, Zhisheng and Peng, Bohao and Liu, Shu and Yu, Bei and Jia, Jiaya},
-  journal = {arXiv preprint arXiv:2505.12081},
-  year         = {2025}
-}
 ```
 
-## Acknowledgement
-We would like to thank the following repos for their great work: 
+## License
 
-- This work is built upon the [EasyR1](https://github.com/hiyouga/EasyR1) and [veRL](https://github.com/volcengine/verl).
-- This work utilizes models from  [Qwen2-VL](https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct), [Qwen2.5-VL](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct) and [SAM2](https://huggingface.co/facebook/sam2-hiera-large). 
+This project inherits the license from the original Seg-Zero repository. Please refer to the upstream repository for license details.
 
+---
 
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=dvlab-research/Seg-Zero&type=Date)](https://star-history.com/#dvlab-research/Seg-Zero&Date)
+**Note**: This is a research fork for educational purposes. The original Seg-Zero inference/evaluation scripts for referring segmentation are preserved but not used in the 3D medical imaging pipeline.
