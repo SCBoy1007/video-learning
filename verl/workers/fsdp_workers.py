@@ -111,24 +111,46 @@ class FSDPWorker(Worker):
         # normalize config
         if self._is_actor:
             self.config.actor.global_batch_size *= self.config.rollout.n
-            self.config.actor.global_batch_size_per_device = (
+            calculated_batch_size = (
                 self.config.actor.global_batch_size // self.device_mesh.shape[0] * self.ulysses_sequence_parallel_size
             )
+            # Safety check: ensure batch size is at least 1
+            if calculated_batch_size == 0:
+                print(f"WARNING: Calculated global_batch_size_per_device is 0!")
+                print(f"  global_batch_size: {self.config.actor.global_batch_size}")
+                print(f"  device_mesh.shape[0]: {self.device_mesh.shape[0]}")
+                print(f"  ulysses_sequence_parallel_size: {self.ulysses_sequence_parallel_size}")
+                print(f"  rollout.n: {self.config.rollout.n}")
+                # Set to minimum viable batch size
+                calculated_batch_size = max(1, self.config.actor.global_batch_size)
+                print(f"  Setting to: {calculated_batch_size}")
+            self.config.actor.global_batch_size_per_device = calculated_batch_size
             assert (
                 self.config.actor.global_batch_size_per_device
                 % self.config.actor.micro_batch_size_per_device_for_update
                 == 0
-            )
+            ), f"global_batch_size_per_device ({self.config.actor.global_batch_size_per_device}) must be divisible by micro_batch_size_per_device_for_update ({self.config.actor.micro_batch_size_per_device_for_update})"
         elif self._is_critic:
             self.config.critic.global_batch_size *= self.config.rollout.n
-            self.config.critic.global_batch_size_per_device = (
+            calculated_batch_size = (
                 self.config.critic.global_batch_size // self.device_mesh.shape[0] * self.ulysses_sequence_parallel_size
             )
+            # Safety check: ensure batch size is at least 1
+            if calculated_batch_size == 0:
+                print(f"WARNING: Calculated critic global_batch_size_per_device is 0!")
+                print(f"  global_batch_size: {self.config.critic.global_batch_size}")
+                print(f"  device_mesh.shape[0]: {self.device_mesh.shape[0]}")
+                print(f"  ulysses_sequence_parallel_size: {self.ulysses_sequence_parallel_size}")
+                print(f"  rollout.n: {self.config.rollout.n}")
+                # Set to minimum viable batch size
+                calculated_batch_size = max(1, self.config.critic.global_batch_size)
+                print(f"  Setting to: {calculated_batch_size}")
+            self.config.critic.global_batch_size_per_device = calculated_batch_size
             assert (
                 self.config.critic.global_batch_size_per_device
                 % self.config.critic.micro_batch_size_per_device_for_update
                 == 0
-            )
+            ), f"critic global_batch_size_per_device ({self.config.critic.global_batch_size_per_device}) must be divisible by micro_batch_size_per_device_for_update ({self.config.critic.micro_batch_size_per_device_for_update})"
 
     def _build_model_optimizer(
         self,
