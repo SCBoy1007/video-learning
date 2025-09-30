@@ -220,7 +220,7 @@ def brain_tumor_3d_ratio_reward(predict_str: str, ground_truth: str) -> float:
 
 def brain_tumor_3d_completeness_reward(predict_str: str) -> float:
     """
-    完整性奖励 (0.5分)
+    完整性奖励 (返回0-1标准化分数，外部乘权重)
     检查是否包含所有必需字段
     """
     try:
@@ -245,7 +245,7 @@ def brain_tumor_3d_completeness_reward(predict_str: str) -> float:
             if len(item['bbox_3d']) != 6:
                 return 0.0
 
-        return 0.5
+        return 1.0  # 返回标准化分数，外部乘权重0.5
 
     except Exception:
         return 0.0
@@ -253,10 +253,10 @@ def brain_tumor_3d_completeness_reward(predict_str: str) -> float:
 
 def brain_tumor_3d_non_repeat_reward(predict_str: str) -> float:
     """
-    防重复奖励 (0.5分)
+    防重复奖励 (返回0-1标准化分数，外部乘权重)
     检查输出是否有重复句子，提高输出质量
     """
-    non_repeat_reward = 0.5  # 初始满分
+    non_repeat_reward = 1.0  # 初始满分（标准化分数）
     try:
         sentences = predict_str.split('.')
 
@@ -278,7 +278,7 @@ def brain_tumor_3d_non_repeat_reward(predict_str: str) -> float:
     except Exception:
         pass
 
-    return non_repeat_reward
+    return non_repeat_reward  # 返回标准化分数，外部乘权重0.5
 
 
 # Reward weights configuration (centralized for easy tuning)
