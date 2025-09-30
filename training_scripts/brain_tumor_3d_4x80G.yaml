@@ -3,7 +3,7 @@ data:
   val_files: None   # Will be overridden in training script
   prompt_key: problem
   max_prompt_length: 28000  # Increased to accommodate video tokens (155 frames × ~130 tokens/frame ≈ 20k + text)
-  max_response_length: 2000
+  max_response_length: 512  # Reduced from 2000 to prevent OOM from long JSON responses
   rollout_batch_size: 8  # Reduced for 4 GPUs
   shuffle: true
   seed: 42
