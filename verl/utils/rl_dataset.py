@@ -39,8 +39,8 @@ def collate_fn(features: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     # Handle variable-length sequences with left padding
     for key, value in tensors.items():
-        if key in ["pixel_values", "image_grid_thw"]:
-            # Keep as list (visual features handled separately)
+        if key in ["pixel_values", "image_grid_thw", "video_grid_thw", "pixel_values_videos"]:
+            # Keep as list (visual features handled separately by vLLM)
             continue
         elif key in ["input_ids", "attention_mask", "position_ids"]:
             # Pad to max length in batch (left padding for decoder-only models)
@@ -69,8 +69,13 @@ def collate_fn(features: List[Dict[str, Any]]) -> Dict[str, Any]:
                     padded.append(t)
             tensors[key] = torch.stack(padded, dim=0)
         else:
-            # Stack other tensors directly
-            tensors[key] = torch.stack(value, dim=0)
+            # Stack other tensors directly (assumes they are same size)
+            # If this fails, the tensor key needs to be added to one of the above categories
+            try:
+                tensors[key] = torch.stack(value, dim=0)
+            except RuntimeError as e:
+                print(f"ERROR: Failed to stack tensor '{key}' with shapes: {[t.shape for t in value]}")
+                raise e
 
     return {**tensors, **non_tensors}
 
@@ -245,7 +250,11 @@ class RLHFDataset(Dataset):
             # Use video processor to handle loaded video frames (requires text parameter)
             video_inputs = self.processor(text=prompt, videos=[video_frames], return_tensors="pt")
             video_grid_thw = video_inputs.get("video_grid_thw", None)
-            row_dict.update(video_inputs)
+            # Only extract vision-related tensors (exclude input_ids/attention_mask which will be generated manually)
+            vision_keys = ["pixel_values", "image_grid_thw", "video_grid_thw", "pixel_values_videos"]
+            for key in vision_keys:
+                if key in video_inputs:
+                    row_dict[key] = video_inputs[key]
 
             if video_grid_thw is not None:
                 merge_length = self.processor.image_processor.merge_size**2
