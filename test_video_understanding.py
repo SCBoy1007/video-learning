@@ -60,7 +60,9 @@ def main():
 
     text_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
     inputs = processor(text=[text_prompt], videos=[video_frames], return_tensors="pt", padding=True)
-    inputs = {k: v.to(model.device) for k, v in inputs.items()}
+
+    # Move tensors to device (skip non-tensor fields like lists)
+    inputs = {k: v.to(model.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
 
     print("Generating response...")
     with torch.inference_mode():
@@ -91,7 +93,9 @@ def main():
 
     text_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
     inputs = processor(text=[text_prompt], videos=[video_frames], return_tensors="pt", padding=True)
-    inputs = {k: v.to(model.device) for k, v in inputs.items()}
+
+    # Move tensors to device (skip non-tensor fields like lists)
+    inputs = {k: v.to(model.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
 
     print("Generating response...")
     with torch.inference_mode():
