@@ -12,8 +12,7 @@ export TRANSFORMERS_NO_ADVISORY_WARNINGS=1 # Suppress transformers warnings
 export VLLM_LOGGING_LEVEL=WARNING          # Only show vLLM warnings/errors
 export TOKENIZERS_PARALLELISM=false        # Suppress tokenizer parallelism warnings
 
-# Memory optimization
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True  # Reduce memory fragmentation
+# Memory optimization (expandable_segments incompatible with vLLM, removed)
 
 MODEL_PATH=pretrained_models/Qwen2.5-VL-7B-Instruct  # Use local model path to avoid Docker cache issues
 
