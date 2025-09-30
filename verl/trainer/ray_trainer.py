@@ -388,8 +388,6 @@ class RayPPOTrainer:
 
         assert len(self.train_dataloader) >= 1
 
-        print(f"Size of train dataloader: {len(self.train_dataloader)}")
-
         if self.config.trainer.max_steps is not None:
             training_steps = self.config.trainer.max_steps
         else:
@@ -398,7 +396,7 @@ class RayPPOTrainer:
         self.training_steps = training_steps
         self.config.worker.actor.optim.training_steps = training_steps
         self.config.worker.critic.optim.training_steps = training_steps
-        print(f"Total training steps: {self.training_steps}")
+        print(f"Training: {len(self.train_dataloader)} batches/episode × {self.config.trainer.total_episodes} episodes = {self.training_steps} steps")
 
     def _maybe_log_val_generations_to_wandb(self, inputs, outputs, scores):
         """Log a table of validation samples to wandb"""

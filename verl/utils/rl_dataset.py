@@ -94,15 +94,14 @@ class RLHFDataset(Dataset):
             datasets = []
             print(f"Loading {len(dataset_paths)} datasets...")
             for i, path in enumerate(dataset_paths):
-                print(f"  Loading dataset {i+1}/{len(dataset_paths)}: {path}")
                 dataset = self._load_single_dataset(path)
                 # Add root_path field to each sample for correct video path resolution
                 dataset = dataset.map(lambda x: {**x, "root_path": path})
                 datasets.append(dataset)
-                print(f"    Loaded {len(dataset)} samples")
+                print(f"  [{i+1}/{len(dataset_paths)}] {path}: {len(dataset)} samples")
 
             self.dataset = concatenate_datasets(datasets)
-            print(f"Combined dataset: {len(self.dataset)} total samples")
+            print(f"Total samples: {len(self.dataset)}")
             # Store None as data_path since we now use per-sample root_path
             self.data_path = None
         else:

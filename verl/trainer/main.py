@@ -47,7 +47,8 @@ def main():
 @ray.remote(num_cpus=1)  # please make sure main_task is not scheduled on head
 def main_task(config: PPOConfig):
     config.deep_post_init()
-    print(json.dumps(config.to_dict(), indent=2))
+    # Uncomment to see full config (disabled to reduce log verbosity)
+    # print(json.dumps(config.to_dict(), indent=2))
     # instantiate tokenizer
     tokenizer = get_tokenizer(config.worker.actor.model.model_path)
     processor = get_processor(config.worker.actor.model.model_path, use_fast=True)

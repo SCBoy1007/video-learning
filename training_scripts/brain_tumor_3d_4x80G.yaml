@@ -2,7 +2,7 @@ data:
   train_files: None  # Will be overridden in training script
   val_files: None   # Will be overridden in training script
   prompt_key: problem
-  max_prompt_length: 1300
+  max_prompt_length: 28000  # Increased to accommodate video tokens (155 frames × ~130 tokens/frame ≈ 20k + text)
   max_response_length: 2000
   rollout_batch_size: 8  # Reduced for 4 GPUs
   shuffle: true
@@ -43,6 +43,7 @@ worker:
     gpu_memory_utilization: 0.6  # Conservative for single GPU
     n: 8  # Increased samples for GRPO (4 GPUs can handle more)
     enable_chunked_prefill: true
+    max_num_batched_tokens: 32768  # Increased to handle video multi-modal embeddings
 
   ref:
     offload:
