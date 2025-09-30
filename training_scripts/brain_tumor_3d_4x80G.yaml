@@ -29,6 +29,8 @@ worker:
     optim:
       lr: 1.0e-6
       weight_decay: 1.0e-2
+      lr_warmup_steps_ratio: 0.0  # No warmup
+      training_steps: 3435  # 229 batches × 15 episodes
     fsdp:
       param_offload: false
       optimizer_offload: false
