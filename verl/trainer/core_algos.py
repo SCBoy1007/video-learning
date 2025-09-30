@@ -152,11 +152,15 @@ def compute_grpo_outcome_advantage(
             id2score[index[i]].append(scores[i])
         for idx in id2score:
             if len(id2score[idx]) == 1:
-                id2mean[idx] = torch.tensor(0.0)
+                # Fix: Use the score itself as mean instead of forcing 0.0
+                id2mean[idx] = id2score[idx][0]
                 id2std[idx] = torch.tensor(1.0)
             elif len(id2score[idx]) > 1:
                 id2mean[idx] = torch.mean(torch.tensor(id2score[idx]))
-                id2std[idx] = torch.std(torch.tensor([id2score[idx]]))
+                # Fix 1: Remove extra brackets that create wrong tensor shape
+                std_val = torch.std(torch.tensor(id2score[idx]))
+                # Fix 2: Clamp std to prevent numerical instability when scores are too similar
+                id2std[idx] = torch.maximum(std_val, torch.tensor(0.1))
             else:
                 raise ValueError(f"no score in prompt index: {idx}")
         for i in range(bsz):
