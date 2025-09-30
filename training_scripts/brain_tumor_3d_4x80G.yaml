@@ -17,7 +17,7 @@ algorithm:
 worker:
   actor:
     global_batch_size: 8  # (8 * rollout.n=8) / 4 GPUs = 16 per device
-    micro_batch_size_per_device_for_update: 4  # 16 / 4 = 4 gradient accumulation steps
+    micro_batch_size_per_device_for_update: 2  # Reduced to 2 to save GPU memory (16 / 2 = 8 accumulation steps)
     micro_batch_size_per_device_for_experience: 4
     max_grad_norm: 1.0
     use_kl_loss: true
