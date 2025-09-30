@@ -127,6 +127,8 @@ class FSDPWorker(Worker):
                 calculated_batch_size = max(1, self.config.actor.global_batch_size)
                 print(f"  Setting to: {calculated_batch_size}")
             self.config.actor.global_batch_size_per_device = calculated_batch_size
+            # Always print final value for debugging
+            print(f"[Rank {self.rank}] Actor global_batch_size_per_device set to: {self.config.actor.global_batch_size_per_device}")
             assert (
                 self.config.actor.global_batch_size_per_device
                 % self.config.actor.micro_batch_size_per_device_for_update
