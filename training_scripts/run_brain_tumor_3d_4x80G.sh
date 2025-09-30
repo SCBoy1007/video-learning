@@ -22,12 +22,12 @@ python3 -m verl.trainer.main \
     worker.actor.model.model_path=${MODEL_PATH} \
     worker.actor.kl_loss_coef=1.0e-2 \
     worker.actor.optim.lr=1.0e-6 \
-    worker.actor.micro_batch_size_per_device_for_update=8 \
-    worker.actor.micro_batch_size_per_device_for_experience=8 \
+    worker.actor.micro_batch_size_per_device_for_update=4 \
+    worker.actor.micro_batch_size_per_device_for_experience=4 \
     worker.rollout.enable_chunked_prefill=false \
-    worker.rollout.n=4 \
-    worker.rollout.tensor_parallel_size=2 \
-    worker.rollout.gpu_memory_utilization=0.7 \
+    worker.rollout.n=8 \
+    worker.rollout.tensor_parallel_size=1 \
+    worker.rollout.gpu_memory_utilization=0.6 \
     worker.reward.compute_score=brain_tumor_3d \
     trainer.experiment_name=${RUN_NAME} \
     trainer.n_gpus_per_node=4 \

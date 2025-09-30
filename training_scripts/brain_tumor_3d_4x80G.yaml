@@ -17,8 +17,8 @@ algorithm:
 worker:
   actor:
     global_batch_size: 16  # Keep same total batch size
-    micro_batch_size_per_device_for_update: 8  # Reduced per device
-    micro_batch_size_per_device_for_experience: 8  # Reduced per device
+    micro_batch_size_per_device_for_update: 4  # 4 GPUs × 4 = 16
+    micro_batch_size_per_device_for_experience: 4  # 4 GPUs × 4 = 16
     max_grad_norm: 1.0
     use_kl_loss: true
     kl_loss_coef: 5.0e-3
@@ -39,9 +39,9 @@ worker:
 
   rollout:
     temperature: 1.0
-    tensor_parallel_size: 2  # Use 2 GPUs for model parallelism
-    gpu_memory_utilization: 0.7  # Higher utilization for A100 80G
-    n: 4  # Reduced for 4 GPUs
+    tensor_parallel_size: 1  # Single GPU inference (7B model fits easily)
+    gpu_memory_utilization: 0.6  # Conservative for single GPU
+    n: 8  # Increased samples for GRPO (4 GPUs can handle more)
     enable_chunked_prefill: true
 
   ref:
@@ -59,6 +59,6 @@ trainer:
   n_gpus_per_node: 4  # 4 GPUs per node
   nnodes: 1
   save_freq: 100
-  test_freq: 458  # Validate every 2 episodes (229 steps/episode × 2)
+  test_freq: 458  # Validate every 2 episodes (approx. 229 steps/episode × 2)
   val_before_train: true  # Validate before training starts
   val_only: false
