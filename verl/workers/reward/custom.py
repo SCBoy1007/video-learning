@@ -102,14 +102,25 @@ class CustomRewardManager:
 
                 # Print sub-metric breakdown for brain_tumor_3d
                 if self.supports_details:
-                    print(f"  └─ thinking_format: {details['thinking_format']:.2f}/1.0 | "
-                          f"video_keyword: {details['video_keyword']:.2f}/1.0 | "
-                          f"format: {details['format']:.2f}/1.0 | "
-                          f"iou: {details['iou']:.2f}/1.5")
-                    print(f"  └─ peak_slice: {details['peak_slice']:.2f}/1.0 | "
-                          f"tumor_ratio: {details['tumor_ratio']:.2f}/1.0 | "
-                          f"completeness: {details['completeness']:.2f}/0.5 | "
-                          f"non_repeat: {details['non_repeat']:.2f}/0.5")
+                    # Import weights dynamically to avoid hardcoding
+                    try:
+                        from verl.utils.reward_score.brain_tumor_3d import get_reward_weights
+                        weights = get_reward_weights()
+                    except:
+                        # Fallback to default if import fails
+                        weights = {
+                            'thinking_format': 0.5, 'video_keyword': 0.5, 'format': 1.0, 'iou': 3.0,
+                            'peak_slice': 1.5, 'tumor_ratio': 1.5, 'completeness': 0.5, 'non_repeat': 0.5
+                        }
+
+                    print(f"  └─ thinking_format: {details['thinking_format']:.2f}/{weights['thinking_format']:.1f} | "
+                          f"video_keyword: {details['video_keyword']:.2f}/{weights['video_keyword']:.1f} | "
+                          f"format: {details['format']:.2f}/{weights['format']:.1f} | "
+                          f"iou: {details['iou']:.2f}/{weights['iou']:.1f}")
+                    print(f"  └─ peak_slice: {details['peak_slice']:.2f}/{weights['peak_slice']:.1f} | "
+                          f"tumor_ratio: {details['tumor_ratio']:.2f}/{weights['tumor_ratio']:.1f} | "
+                          f"completeness: {details['completeness']:.2f}/{weights['completeness']:.1f} | "
+                          f"non_repeat: {details['non_repeat']:.2f}/{weights['non_repeat']:.1f}")
             else:
                 # Print only score for remaining samples
                 print(f"[score {i+1}] {score:.3f}")

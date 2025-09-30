@@ -21,10 +21,10 @@ def brain_tumor_3d_thinking_format_reward(predict_str: str) -> float:
     """
     思维格式奖励 (1.0分)
     检查是否包含<think>和<answer>标签，模仿Seg-Zero的thinking_format_reward
-    使用fullmatch确保严格匹配（对齐Seg-Zero）
+    使用search而非fullmatch以容忍输出前后的空白符
     """
     pattern = r"<think>.*?</think>\s*<answer>.*?</answer>"
-    match = re.fullmatch(pattern, predict_str.strip(), re.DOTALL | re.IGNORECASE)
+    match = re.search(pattern, predict_str.strip(), re.DOTALL | re.IGNORECASE)
     return 1.0 if match else 0.0
 
 
@@ -281,6 +281,24 @@ def brain_tumor_3d_non_repeat_reward(predict_str: str) -> float:
     return non_repeat_reward
 
 
+# Reward weights configuration (centralized for easy tuning)
+REWARD_WEIGHTS = {
+    'thinking_format': 0.5,  # 降低，容易达到
+    'video_keyword': 0.5,    # 降低，容易达到
+    'format': 1.0,           # 保持，基础要求
+    'iou': 3.0,              # 加倍，核心任务 (原 1.5 → 3.0)
+    'peak_slice': 1.5,       # 提升，重要指标 (原 1.0 → 1.5)
+    'tumor_ratio': 1.5,      # 提升，重要指标 (原 1.0 → 1.5)
+    'completeness': 0.5,     # 保持
+    'non_repeat': 0.5,       # 保持
+}
+
+
+def get_reward_weights():
+    """获取奖励权重配置，供其他模块使用"""
+    return REWARD_WEIGHTS.copy()
+
+
 def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_details: bool = False):
     """
     3D脑肿瘤检测总奖励函数 (最高9.0分)
@@ -306,14 +324,15 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
     Returns:
         float or tuple: 总分或(总分, 详细字典)
     """
-    thinking_format_reward = brain_tumor_3d_thinking_format_reward(predict_str) * 0.5
-    video_keyword_reward = brain_tumor_3d_video_keyword_reward(predict_str) * 0.5
-    format_reward = brain_tumor_3d_format_reward(predict_str)
-    iou_reward = brain_tumor_3d_iou_reward(predict_str, ground_truth) * 2.0  # 1.5 → 3.0
-    peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth) * 1.5  # 1.0 → 1.5
-    ratio_reward = brain_tumor_3d_ratio_reward(predict_str, ground_truth) * 1.5  # 1.0 → 1.5
-    completeness_reward = brain_tumor_3d_completeness_reward(predict_str)
-    non_repeat_reward = brain_tumor_3d_non_repeat_reward(predict_str)
+    # Use centralized weights
+    thinking_format_reward = brain_tumor_3d_thinking_format_reward(predict_str) * REWARD_WEIGHTS['thinking_format']
+    video_keyword_reward = brain_tumor_3d_video_keyword_reward(predict_str) * REWARD_WEIGHTS['video_keyword']
+    format_reward = brain_tumor_3d_format_reward(predict_str) * REWARD_WEIGHTS['format']
+    iou_reward = brain_tumor_3d_iou_reward(predict_str, ground_truth) * REWARD_WEIGHTS['iou']
+    peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['peak_slice']
+    ratio_reward = brain_tumor_3d_ratio_reward(predict_str, ground_truth) * REWARD_WEIGHTS['tumor_ratio']
+    completeness_reward = brain_tumor_3d_completeness_reward(predict_str) * REWARD_WEIGHTS['completeness']
+    non_repeat_reward = brain_tumor_3d_non_repeat_reward(predict_str) * REWARD_WEIGHTS['non_repeat']
 
     total_reward = thinking_format_reward + video_keyword_reward + format_reward + iou_reward + peak_slice_reward + ratio_reward + completeness_reward + non_repeat_reward
 
