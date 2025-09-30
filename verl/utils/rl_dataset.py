@@ -59,11 +59,14 @@ def collate_fn(features: List[Dict[str, Any]]) -> Dict[str, Any]:
                     # Left pad (prepend padding)
                     if t.dim() == 1:
                         padding = torch.full((pad_len,), pad_value, dtype=t.dtype, device=t.device)
-                        t = torch.cat([padding, t], dim=0)
+                        t_padded = torch.cat([padding, t], dim=0)
                     else:  # position_ids with shape (3, seq_len)
                         padding = torch.full((t.shape[0], pad_len), pad_value, dtype=t.dtype, device=t.device)
-                        t = torch.cat([padding, t], dim=1)
-                padded.append(t)
+                        t_padded = torch.cat([padding, t], dim=1)
+                    padded.append(t_padded)
+                else:
+                    # No padding needed - add tensor as-is
+                    padded.append(t)
             tensors[key] = torch.stack(padded, dim=0)
         else:
             # Stack other tensors directly
