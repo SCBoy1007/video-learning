@@ -17,14 +17,35 @@ import json
 import numpy as np
 
 
+def brain_tumor_3d_thinking_format_reward(predict_str: str) -> float:
+    """
+    思维格式奖励 (1.0分)
+    检查是否包含<think>和<answer>标签，模仿Seg-Zero的thinking_format_reward
+    """
+    pattern = r"<think>.*?</think>\s*<answer>.*?</answer>"
+    match = re.search(pattern, predict_str, re.DOTALL | re.IGNORECASE)
+    return 1.0 if match else 0.0
+
+
 def brain_tumor_3d_format_reward(predict_str: str) -> float:
     """
     检查输出格式是否符合要求 (1.0分)
     要求包含有效的JSON格式，包含bbox_3d, peak_slice, tumor_ratio字段
+    优先从<answer>标签内提取JSON，如果没有标签则降级到全文搜索
     """
     try:
+        # 优先从<answer>标签内提取JSON（模仿Seg-Zero）
+        answer_pattern = r'<answer>(.*?)</answer>'
+        answer_match = re.search(answer_pattern, predict_str, re.DOTALL | re.IGNORECASE)
+
+        if answer_match:
+            json_text = answer_match.group(1)
+        else:
+            # 如果没有<answer>标签，降级到全文搜索（但会损失thinking_format_reward）
+            json_text = predict_str
+
         # 从文本中提取JSON
-        json_data = extract_json_from_text(predict_str)
+        json_data = extract_json_from_text(json_text)
         if not json_data:
             return 0.0
 
@@ -61,8 +82,13 @@ def brain_tumor_3d_iou_reward(predict_str: str, ground_truth: str) -> float:
         gt_data = json.loads(ground_truth)
         gt_bbox = gt_data[0]['bbox_3d']
 
+        # 优先从<answer>标签内提取JSON
+        answer_pattern = r'<answer>(.*?)</answer>'
+        answer_match = re.search(answer_pattern, predict_str, re.DOTALL | re.IGNORECASE)
+        json_text = answer_match.group(1) if answer_match else predict_str
+
         # 解析预测结果
-        pred_data = extract_json_from_text(predict_str)
+        pred_data = extract_json_from_text(json_text)
         if not pred_data:
             return 0.0
 
@@ -95,8 +121,13 @@ def brain_tumor_3d_peak_slice_reward(predict_str: str, ground_truth: str) -> flo
         gt_data = json.loads(ground_truth)
         gt_slice = gt_data[0]['peak_slice']
 
+        # 优先从<answer>标签内提取JSON
+        answer_pattern = r'<answer>(.*?)</answer>'
+        answer_match = re.search(answer_pattern, predict_str, re.DOTALL | re.IGNORECASE)
+        json_text = answer_match.group(1) if answer_match else predict_str
+
         # 解析预测结果
-        pred_data = extract_json_from_text(predict_str)
+        pred_data = extract_json_from_text(json_text)
         if not pred_data:
             return 0.0
 
@@ -129,8 +160,13 @@ def brain_tumor_3d_ratio_reward(predict_str: str, ground_truth: str) -> float:
         gt_data = json.loads(ground_truth)
         gt_ratio = gt_data[0]['tumor_ratio']
 
+        # 优先从<answer>标签内提取JSON
+        answer_pattern = r'<answer>(.*?)</answer>'
+        answer_match = re.search(answer_pattern, predict_str, re.DOTALL | re.IGNORECASE)
+        json_text = answer_match.group(1) if answer_match else predict_str
+
         # 解析预测结果
-        pred_data = extract_json_from_text(predict_str)
+        pred_data = extract_json_from_text(json_text)
         if not pred_data:
             return 0.0
 
@@ -163,7 +199,12 @@ def brain_tumor_3d_completeness_reward(predict_str: str) -> float:
     检查是否包含所有必需字段
     """
     try:
-        json_data = extract_json_from_text(predict_str)
+        # 优先从<answer>标签内提取JSON
+        answer_pattern = r'<answer>(.*?)</answer>'
+        answer_match = re.search(answer_pattern, predict_str, re.DOTALL | re.IGNORECASE)
+        json_text = answer_match.group(1) if answer_match else predict_str
+
+        json_data = extract_json_from_text(json_text)
         if not json_data:
             return 0.0
 
@@ -217,9 +258,10 @@ def brain_tumor_3d_non_repeat_reward(predict_str: str) -> float:
 
 def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str) -> float:
     """
-    3D脑肿瘤检测总奖励函数 (最高5.5分)
+    3D脑肿瘤检测总奖励函数 (最高6.5分)
 
-    组成：
+    组成（模仿Seg-Zero的奖励结构）：
+    - 思维格式奖励: 1.0分 (新增，要求<think>和<answer>标签)
     - 格式奖励: 1.0分
     - 3D IoU奖励: 1.5分
     - 峰值切片奖励: 1.0分
@@ -227,6 +269,7 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str) -> float:
     - 完整性奖励: 0.5分
     - 防重复奖励: 0.5分
     """
+    thinking_format_reward = brain_tumor_3d_thinking_format_reward(predict_str)
     format_reward = brain_tumor_3d_format_reward(predict_str)
     iou_reward = brain_tumor_3d_iou_reward(predict_str, ground_truth)
     peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth)
@@ -234,7 +277,7 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str) -> float:
     completeness_reward = brain_tumor_3d_completeness_reward(predict_str)
     non_repeat_reward = brain_tumor_3d_non_repeat_reward(predict_str)
 
-    total_reward = format_reward + iou_reward + peak_slice_reward + ratio_reward + completeness_reward + non_repeat_reward
+    total_reward = thinking_format_reward + format_reward + iou_reward + peak_slice_reward + ratio_reward + completeness_reward + non_repeat_reward
 
     return total_reward
 
@@ -324,14 +367,15 @@ def compute_3d_iou(box1, box2):
 
 
 if __name__ == "__main__":
-    # 测试代码
-    predict_str = """[{"bbox_3d": [91, 33, 102, 131, 84, 150], "peak_slice": 124, "tumor_ratio": 0.022}]"""
+    # 测试代码（模仿Seg-Zero的格式）
+    predict_str = """<think>Analyzing the MRI sequence, tumor is located in right hemisphere, spanning slices 102-143</think><answer>[{"bbox_3d": [91, 33, 102, 131, 84, 150], "peak_slice": 124, "tumor_ratio": 0.022}]</answer>"""
     ground_truth = """[{"bbox_3d": [91, 33, 102, 131, 84, 150], "peak_slice": 124, "tumor_ratio": 0.021957}]"""
 
     score = brain_tumor_3d_compute_score(predict_str, ground_truth)
-    print(f"Total score: {score}/5.5")
+    print(f"Total score: {score}/6.5")
 
     # 测试各个组件
+    print(f"Thinking format reward: {brain_tumor_3d_thinking_format_reward(predict_str)}")
     print(f"Format reward: {brain_tumor_3d_format_reward(predict_str)}")
     print(f"IoU reward: {brain_tumor_3d_iou_reward(predict_str, ground_truth)}")
     print(f"Peak slice reward: {brain_tumor_3d_peak_slice_reward(predict_str, ground_truth)}")

@@ -158,7 +158,11 @@ class RLHFDataset(Dataset):
         if any(path in data_path for path in ['video', 'MRI', 'BraTS']):
             # Video prompt for brain tumor detection
             self.user_prompt = "<video>\n" \
-                "{Question}"
+                "{Question}\n" \
+                "Output the thinking process in <think> </think> and final answer in <answer> </answer> tags.\n" \
+                "Output the 3D bounding box, peak slice, and tumor ratio in JSON format.\n" \
+                "i.e., <think> Analyze the MRI sequence to identify tumor location, boundaries, peak slice, and volume ratio </think>\n" \
+                '<answer>[{{"bbox_3d": [x1,y1,z1,x2,y2,z2], "peak_slice": N, "tumor_ratio": R}}]</answer>'
         else:
             # Original image prompt
             self.user_prompt = "<image>\n" \
