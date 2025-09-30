@@ -43,7 +43,7 @@ worker:
     temperature: 1.0
     tensor_parallel_size: 1  # Single GPU inference (7B model fits easily)
     gpu_memory_utilization: 0.55  # Further reduced from 0.6 to leave more room for FSDP
-    n: 4  # Increased from 2 to 4 for better GRPO sample diversity (rollout is inference-only, minimal memory impact)
+    n: 8  # Increased to 8 for better GRPO gradient estimation and exploration
     enable_chunked_prefill: true
     max_num_batched_tokens: 32768  # Increased to handle video multi-modal embeddings
 
