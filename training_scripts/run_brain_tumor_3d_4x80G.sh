@@ -12,7 +12,9 @@ export TRANSFORMERS_NO_ADVISORY_WARNINGS=1 # Suppress transformers warnings
 export VLLM_LOGGING_LEVEL=WARNING          # Only show vLLM warnings/errors
 export TOKENIZERS_PARALLELISM=false        # Suppress tokenizer parallelism warnings
 
-# Memory optimization (expandable_segments incompatible with vLLM, removed)
+# Memory optimization
+# expandable_segments incompatible with vLLM, using max_split_size_mb instead
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
 
 MODEL_PATH=pretrained_models/Qwen2.5-VL-7B-Instruct  # Use local model path to avoid Docker cache issues
 
@@ -29,11 +31,11 @@ python3 -m verl.trainer.main \
     worker.actor.model.model_path=${MODEL_PATH} \
     worker.actor.kl_loss_coef=1.0e-2 \
     worker.actor.optim.lr=1.0e-6 \
-    worker.actor.micro_batch_size_per_device_for_update=2 \
+    worker.actor.micro_batch_size_per_device_for_update=1 \
     worker.rollout.enable_chunked_prefill=false \
-    worker.rollout.n=4 \
+    worker.rollout.n=2 \
     worker.rollout.tensor_parallel_size=1 \
-    worker.rollout.gpu_memory_utilization=0.6 \
+    worker.rollout.gpu_memory_utilization=0.55 \
     worker.reward.compute_score=brain_tumor_3d \
     trainer.experiment_name=${RUN_NAME} \
     trainer.n_gpus_per_node=4 \
