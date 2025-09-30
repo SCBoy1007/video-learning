@@ -5,7 +5,12 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
 
 set -x
 
+# Reduce log verbosity
 export VLLM_ATTENTION_BACKEND=XFORMERS
+export RAY_DEDUP_LOGS=1                    # Deduplicate Ray logs across workers
+export TRANSFORMERS_NO_ADVISORY_WARNINGS=1 # Suppress transformers warnings
+export VLLM_LOGGING_LEVEL=WARNING          # Only show vLLM warnings/errors
+export TOKENIZERS_PARALLELISM=false        # Suppress tokenizer parallelism warnings
 
 MODEL_PATH=pretrained_models/Qwen2.5-VL-7B-Instruct  # Use local model path to avoid Docker cache issues
 

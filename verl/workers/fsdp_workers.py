@@ -118,17 +118,11 @@ class FSDPWorker(Worker):
             )
             # Safety check: ensure batch size is at least 1
             if calculated_batch_size == 0:
-                print(f"WARNING: Calculated global_batch_size_per_device is 0!")
-                print(f"  global_batch_size: {self.config.actor.global_batch_size}")
-                print(f"  device_mesh.shape[0]: {self.device_mesh.shape[0]}")
-                print(f"  ulysses_sequence_parallel_size: {self.ulysses_sequence_parallel_size}")
-                print(f"  rollout.n: {self.config.rollout.n}")
+                if self.rank == 0:
+                    print(f"WARNING: Calculated global_batch_size_per_device is 0! Setting to minimum viable batch size.")
                 # Set to minimum viable batch size
                 calculated_batch_size = max(1, self.config.actor.global_batch_size)
-                print(f"  Setting to: {calculated_batch_size}")
             self.config.actor.global_batch_size_per_device = calculated_batch_size
-            # Always print final value for debugging
-            print(f"[Rank {self.rank}] Actor global_batch_size_per_device set to: {self.config.actor.global_batch_size_per_device}")
             assert (
                 self.config.actor.global_batch_size_per_device
                 % self.config.actor.micro_batch_size_per_device_for_update
@@ -179,7 +173,8 @@ class FSDPWorker(Worker):
         except Exception:
             self.generation_config = GenerationConfig.from_model_config(self.model_config)
 
-        self.print_rank0(f"Model config: {self.model_config}")
+        # Commented out to reduce log verbosity (model config is very long)
+        # self.print_rank0(f"Model config: {self.model_config}")
 
         if padding_free:
             raise NotImplementedError("Padding free is not implemented yet.")
@@ -395,13 +390,8 @@ class FSDPWorker(Worker):
             load_fsdp_optimizer(optimizer=self.optimizer)
 
         log_gpu_memory_usage("Before update policy")
-        import sys
-        print(f"[Rank {self.rank}] Before preprocess: data size = {len(data)}", flush=True)
-        sys.stdout.flush()
         with self.ulysses_sharding_manager:
             data = self.ulysses_sharding_manager.preprocess_data(data=data)
-            print(f"[Rank {self.rank}] After preprocess: data size = {len(data)}, global_batch_size_per_device = {self.config.actor.global_batch_size_per_device}", flush=True)
-            sys.stdout.flush()
             with Timer(name="update_policy", logger=None) as timer:
                 metrics = self.actor.update_policy(data=data)
 
