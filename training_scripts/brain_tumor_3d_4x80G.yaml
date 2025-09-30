@@ -57,7 +57,7 @@ worker:
 
 trainer:
   total_episodes: 15  # Increased for proper RL training
-  logger: ["console"]  # Disabled wandb for debugging
+  logger: ["console", "wandb"]  # Enable WandB for score tracking
   project_name: brain_tumor_3d_4x80G
   n_gpus_per_node: 4  # 4 GPUs per node
   nnodes: 1
