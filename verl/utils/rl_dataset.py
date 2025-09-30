@@ -212,8 +212,8 @@ class RLHFDataset(Dataset):
             vr = VideoReader(video_file_path)
             video_frames = vr.get_batch(list(range(len(vr)))).asnumpy()
 
-            # Use video processor to handle loaded video frames
-            video_inputs = self.processor(videos=[video_frames], return_tensors="pt")
+            # Use video processor to handle loaded video frames (requires text parameter)
+            video_inputs = self.processor(text=prompt, videos=[video_frames], return_tensors="pt")
             video_grid_thw = video_inputs.get("video_grid_thw", None)
             row_dict.update(video_inputs)
 
