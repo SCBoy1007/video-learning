@@ -283,17 +283,20 @@ def brain_tumor_3d_non_repeat_reward(predict_str: str) -> float:
 
 def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_details: bool = False):
     """
-    3D脑肿瘤检测总奖励函数 (最高7.5分)
+    3D脑肿瘤检测总奖励函数 (最高9.0分)
 
-    组成（模仿Seg-Zero的奖励结构）：
-    - 思维格式奖励: 1.0分 (严格fullmatch，对齐Seg-Zero)
-    - 视频关键词奖励: 1.0分 (新增，强化视频理解意识)
-    - 格式奖励: 1.0分
-    - 3D IoU奖励: 1.5分
-    - 峰值切片奖励: 1.0分
-    - 肿瘤比例奖励: 1.0分
-    - 完整性奖励: 0.5分
-    - 防重复奖励: 0.5分
+    组成（调整权重以增加奖励方差）：
+    - 思维格式奖励: 0.5分 (降低，容易达到)
+    - 视频关键词奖励: 0.5分 (降低，容易达到)
+    - 格式奖励: 1.0分 (保持，基础要求)
+    - 3D IoU奖励: 3.0分 (加倍，核心任务)
+    - 峰值切片奖励: 1.5分 (提升，重要指标)
+    - 肿瘤比例奖励: 1.5分 (提升，重要指标)
+    - 完整性奖励: 0.5分 (保持)
+    - 防重复奖励: 0.5分 (保持)
+
+    目标：降低容易获得的格式奖励权重，提高任务相关奖励权重，
+         增加奖励方差，强化任务学习信号。
 
     Args:
         predict_str: 模型预测字符串
@@ -303,12 +306,12 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
     Returns:
         float or tuple: 总分或(总分, 详细字典)
     """
-    thinking_format_reward = brain_tumor_3d_thinking_format_reward(predict_str)
-    video_keyword_reward = brain_tumor_3d_video_keyword_reward(predict_str)
+    thinking_format_reward = brain_tumor_3d_thinking_format_reward(predict_str) * 0.5
+    video_keyword_reward = brain_tumor_3d_video_keyword_reward(predict_str) * 0.5
     format_reward = brain_tumor_3d_format_reward(predict_str)
-    iou_reward = brain_tumor_3d_iou_reward(predict_str, ground_truth)
-    peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth)
-    ratio_reward = brain_tumor_3d_ratio_reward(predict_str, ground_truth)
+    iou_reward = brain_tumor_3d_iou_reward(predict_str, ground_truth) * 2.0  # 1.5 → 3.0
+    peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth) * 1.5  # 1.0 → 1.5
+    ratio_reward = brain_tumor_3d_ratio_reward(predict_str, ground_truth) * 1.5  # 1.0 → 1.5
     completeness_reward = brain_tumor_3d_completeness_reward(predict_str)
     non_repeat_reward = brain_tumor_3d_non_repeat_reward(predict_str)
 
