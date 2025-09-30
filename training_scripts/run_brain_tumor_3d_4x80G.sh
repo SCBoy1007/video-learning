@@ -12,8 +12,8 @@ MODEL_PATH=pretrained_models/Qwen2.5-VL-7B-Instruct  # Use local model path to a
 RUN_NAME=$(basename "$0" .sh)
 
 # Use two datasets for training, reserve Additional_video for validation
-TRAIN_DATA="data/BraTS_GLI_TrainingData_video,data/MSD_T1_MRI_video"
-VAL_DATA="data/BraTS_GLI_TrainingData_Additional_video"
+TRAIN_DATA="data/BraTS_GLI_TrainingData_video/train,data/MSD_T1_MRI_video/train"
+VAL_DATA="data/BraTS_GLI_TrainingData_Additional_video/train"
 
 python3 -m verl.trainer.main \
     config=training_scripts/brain_tumor_3d_4x80G.yaml \
