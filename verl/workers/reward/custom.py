@@ -41,7 +41,7 @@ class CustomRewardManager:
 
     def __call__(self, data: DataProto) -> torch.Tensor:
         reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
-        already_print = 0
+        already_print_detail = 0
 
         for i in range(len(data)):
             data_item = data[i]  # DataProtoItem
@@ -67,11 +67,15 @@ class CustomRewardManager:
             score = self.compute_score(response_str, ground_truth)
             reward_tensor[i, valid_response_length - 1] = score
 
-            if already_print < self.num_examine:
-                already_print += 1
+            # Print first sample's full details per batch
+            if already_print_detail < self.num_examine:
+                already_print_detail += 1
                 print("[prompt]", prompt_str)
                 print("[response]", response_str)
                 print("[ground_truth]", ground_truth)
-                print("[score]", score)
+                print(f"[score] {score:.3f}")
+            else:
+                # Print only score for remaining samples
+                print(f"[score {i+1}] {score:.3f}")
 
         return reward_tensor

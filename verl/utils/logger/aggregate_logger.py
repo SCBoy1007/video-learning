@@ -23,7 +23,11 @@ def concat_dict_to_str(dict: Dict, step):
     output = [f"step {step}:"]
     for k, v in dict.items():
         if isinstance(v, numbers.Number):
-            output.append(f"{k}:{v:.3f}")
+            # Use more decimal places for learning rate to show small values like 1e-6
+            if "lr" in k.lower():
+                output.append(f"{k}:{v:.6f}")
+            else:
+                output.append(f"{k}:{v:.3f}")
 
     output_str = " - ".join(output)
     return output_str

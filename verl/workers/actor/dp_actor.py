@@ -145,13 +145,6 @@ class DataParallelPPOActor(BasePPOActor):
     def update_policy(self, data: DataProto) -> Dict[str, Any]:
         self.actor_module.train()
 
-        # Memory monitoring at update start
-        if torch.cuda.is_available() and self.rank == 0:
-            torch.cuda.synchronize()
-            mem_allocated = torch.cuda.memory_allocated() / 1024**3
-            mem_reserved = torch.cuda.memory_reserved() / 1024**3
-            print(f"[MEMORY] Update start - Allocated: {mem_allocated:.2f}GB, Reserved: {mem_reserved:.2f}GB")
-
         temperature = data.meta_info["temperature"]  # temperature must be in the data.meta_info to avoid slient error
         select_keys = ["responses", "input_ids", "attention_mask", "position_ids", "old_log_probs", "advantages"]
         if self.config.use_kl_loss:
@@ -177,13 +170,6 @@ class DataParallelPPOActor(BasePPOActor):
 
             self.actor_optimizer.zero_grad()
             for mb_idx, micro_batch in enumerate(tqdm(micro_batches, desc=f"Update policy [{i + 1}/{n}]", disable=(self.rank != 0))):
-                # Memory before micro-batch
-                if torch.cuda.is_available() and self.rank == 0:
-                    torch.cuda.synchronize()
-                    mem_before = torch.cuda.memory_allocated() / 1024**3
-                    mem_reserved_before = torch.cuda.memory_reserved() / 1024**3
-                    print(f"[MEMORY] Micro-batch {mb_idx+1}/{len(micro_batches)} start - Allocated: {mem_before:.2f}GB, Reserved: {mem_reserved_before:.2f}GB")
-
                 micro_batch.to("cuda")
                 model_inputs = {**micro_batch.batch, **micro_batch.non_tensor_batch}
                 responses = model_inputs["responses"]
@@ -196,21 +182,8 @@ class DataParallelPPOActor(BasePPOActor):
                 clip_ratio = self.config.clip_ratio
                 entropy_coeff = self.config.entropy_coeff
 
-                # Memory after data loading
-                if torch.cuda.is_available() and self.rank == 0:
-                    torch.cuda.synchronize()
-                    mem_after_load = torch.cuda.memory_allocated() / 1024**3
-                    print(f"[MEMORY] After data load - Allocated: {mem_after_load:.2f}GB (+{mem_after_load - mem_before:.2f}GB)")
-
                 # all return: (bsz, response_length)
                 entropy, log_prob = self._forward_micro_batch(model_inputs, temperature=temperature)
-
-                # Memory after forward
-                if torch.cuda.is_available() and self.rank == 0:
-                    torch.cuda.synchronize()
-                    mem_after_fwd = torch.cuda.memory_allocated() / 1024**3
-                    mem_reserved_after_fwd = torch.cuda.memory_reserved() / 1024**3
-                    print(f"[MEMORY] After forward - Allocated: {mem_after_fwd:.2f}GB (+{mem_after_fwd - mem_after_load:.2f}GB), Reserved: {mem_reserved_after_fwd:.2f}GB")
 
                 pg_loss, pg_clipfrac, ppo_kl = core_algos.compute_policy_loss(
                     old_log_prob=old_log_prob,
@@ -240,22 +213,7 @@ class DataParallelPPOActor(BasePPOActor):
 
                 loss = policy_loss / gradient_accumulation
 
-                # Memory before backward
-                if torch.cuda.is_available() and self.rank == 0:
-                    torch.cuda.synchronize()
-                    mem_before_bwd = torch.cuda.memory_allocated() / 1024**3
-                    mem_reserved_before_bwd = torch.cuda.memory_reserved() / 1024**3
-                    print(f"[MEMORY] Before backward - Allocated: {mem_before_bwd:.2f}GB, Reserved: {mem_reserved_before_bwd:.2f}GB")
-
                 loss.backward()
-
-                # Memory after backward
-                if torch.cuda.is_available() and self.rank == 0:
-                    torch.cuda.synchronize()
-                    mem_after_bwd = torch.cuda.memory_allocated() / 1024**3
-                    mem_reserved_after_bwd = torch.cuda.memory_reserved() / 1024**3
-                    mem_free = (torch.cuda.get_device_properties(0).total_memory / 1024**3) - mem_reserved_after_bwd
-                    print(f"[MEMORY] After backward - Allocated: {mem_after_bwd:.2f}GB (+{mem_after_bwd - mem_before_bwd:.2f}GB), Reserved: {mem_reserved_after_bwd:.2f}GB, Free: {mem_free:.2f}GB")
 
                 batch_metrics = {
                     "actor/entropy_loss": entropy_loss.detach().item(),
@@ -265,30 +223,9 @@ class DataParallelPPOActor(BasePPOActor):
                 }
                 append_to_dict(metrics, batch_metrics)
 
-            # Memory before optimizer step
-            if torch.cuda.is_available() and self.rank == 0:
-                torch.cuda.synchronize()
-                mem_before_opt = torch.cuda.memory_allocated() / 1024**3
-                print(f"[MEMORY] Before optimizer step - Allocated: {mem_before_opt:.2f}GB")
-
             grad_norm = self._optimizer_step()
             append_to_dict(metrics, {"actor/grad_norm": grad_norm.detach().item()})
 
-            # Memory after optimizer step
-            if torch.cuda.is_available() and self.rank == 0:
-                torch.cuda.synchronize()
-                mem_after_opt = torch.cuda.memory_allocated() / 1024**3
-                mem_reserved_after_opt = torch.cuda.memory_reserved() / 1024**3
-                print(f"[MEMORY] After optimizer step - Allocated: {mem_after_opt:.2f}GB, Reserved: {mem_reserved_after_opt:.2f}GB")
-
         self.actor_optimizer.zero_grad()
-
-        # Memory at update end
-        if torch.cuda.is_available() and self.rank == 0:
-            torch.cuda.synchronize()
-            mem_end = torch.cuda.memory_allocated() / 1024**3
-            mem_reserved_end = torch.cuda.memory_reserved() / 1024**3
-            print(f"[MEMORY] Update end - Allocated: {mem_end:.2f}GB, Reserved: {mem_reserved_end:.2f}GB")
-            print(f"[MEMORY] ========================================")
 
         return metrics
