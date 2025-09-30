@@ -7,7 +7,7 @@ set -x
 
 export VLLM_ATTENTION_BACKEND=XFORMERS
 
-MODEL_PATH=pretrained_models/Qwen2.5-VL-7B-Instruct  # replace it with your local file path
+MODEL_PATH=Qwen/Qwen2.5-VL-7B-Instruct  # Use HuggingFace model ID (auto-download to cache)
 
 RUN_NAME=$(basename "$0" .sh)
 
