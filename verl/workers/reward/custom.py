@@ -51,6 +51,7 @@ class CustomRewardManager:
         if self.supports_details:
             metric_accumulators = {
                 'thinking_format': [],
+                'video_keyword': [],
                 'format': [],
                 'iou': [],
                 'peak_slice': [],
@@ -102,6 +103,7 @@ class CustomRewardManager:
                 # Print sub-metric breakdown for brain_tumor_3d
                 if self.supports_details:
                     print(f"  └─ thinking_format: {details['thinking_format']:.2f}/1.0 | "
+                          f"video_keyword: {details['video_keyword']:.2f}/1.0 | "
                           f"format: {details['format']:.2f}/1.0 | "
                           f"iou: {details['iou']:.2f}/1.5")
                     print(f"  └─ peak_slice: {details['peak_slice']:.2f}/1.0 | "

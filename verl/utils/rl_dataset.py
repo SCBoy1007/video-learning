@@ -156,13 +156,15 @@ class RLHFDataset(Dataset):
         
         # Check if this is video data or image data based on data_path
         if any(path in data_path for path in ['video', 'MRI', 'BraTS']):
-            # Video prompt for brain tumor detection
+            # Video prompt for brain tumor detection (aligned with Seg-Zero style)
             self.user_prompt = "<video>\n" \
-                "{Question}\n" \
+                "Please identify and localize \"{Question}\" in this MRI video sequence.\n" \
+                "Analyze the video frames to determine tumor boundaries, peak location, and volume.\n" \
                 "Output the thinking process in <think> </think> and final answer in <answer> </answer> tags.\n" \
-                "Output the 3D bounding box, peak slice, and tumor ratio in JSON format.\n" \
-                "i.e., <think> Analyze the MRI sequence to identify tumor location, boundaries, peak slice, and volume ratio </think>\n" \
-                '<answer>[{{"bbox_3d": [x1,y1,z1,x2,y2,z2], "peak_slice": N, "tumor_ratio": R}}]</answer>'
+                "Start your thinking with 'This video shows' to describe what you observe.\n" \
+                "Output the 3D bounding box coordinates, peak slice index, and tumor volume ratio in JSON format.\n" \
+                "i.e., <think> This video shows an MRI sequence where tumor appears in right hemisphere starting at slice 102. Peak intensity at slice 124. Estimating volume as 2.2% based on bbox dimensions </think>\n" \
+                '<answer>[{{"bbox_3d": [91, 33, 102, 131, 84, 150], "peak_slice": 124, "tumor_ratio": 0.022}}]</answer>'
         else:
             # Original image prompt
             self.user_prompt = "<image>\n" \

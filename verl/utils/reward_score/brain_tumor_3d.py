@@ -21,10 +21,35 @@ def brain_tumor_3d_thinking_format_reward(predict_str: str) -> float:
     """
     思维格式奖励 (1.0分)
     检查是否包含<think>和<answer>标签，模仿Seg-Zero的thinking_format_reward
+    使用fullmatch确保严格匹配（对齐Seg-Zero）
     """
     pattern = r"<think>.*?</think>\s*<answer>.*?</answer>"
-    match = re.search(pattern, predict_str, re.DOTALL | re.IGNORECASE)
+    match = re.fullmatch(pattern, predict_str.strip(), re.DOTALL | re.IGNORECASE)
     return 1.0 if match else 0.0
+
+
+def brain_tumor_3d_video_keyword_reward(predict_str: str) -> float:
+    """
+    视频关键词奖励 (1.0分)
+    强制要求<think>标签以"This video shows"开头，确保模型意识到输入是视频
+    """
+    try:
+        # 提取<think>标签内容
+        think_pattern = r'<think>(.*?)</think>'
+        think_match = re.search(think_pattern, predict_str, re.DOTALL | re.IGNORECASE)
+
+        if not think_match:
+            return 0.0
+
+        think_content = think_match.group(1).strip()
+
+        # 检查是否以"This video shows"开头（不区分大小写）
+        if think_content.lower().startswith('this video shows'):
+            return 1.0
+
+        return 0.0
+    except Exception:
+        return 0.0
 
 
 def brain_tumor_3d_format_reward(predict_str: str) -> float:
@@ -258,10 +283,11 @@ def brain_tumor_3d_non_repeat_reward(predict_str: str) -> float:
 
 def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_details: bool = False):
     """
-    3D脑肿瘤检测总奖励函数 (最高6.5分)
+    3D脑肿瘤检测总奖励函数 (最高7.5分)
 
     组成（模仿Seg-Zero的奖励结构）：
-    - 思维格式奖励: 1.0分 (新增，要求<think>和<answer>标签)
+    - 思维格式奖励: 1.0分 (严格fullmatch，对齐Seg-Zero)
+    - 视频关键词奖励: 1.0分 (新增，强化视频理解意识)
     - 格式奖励: 1.0分
     - 3D IoU奖励: 1.5分
     - 峰值切片奖励: 1.0分
@@ -278,6 +304,7 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
         float or tuple: 总分或(总分, 详细字典)
     """
     thinking_format_reward = brain_tumor_3d_thinking_format_reward(predict_str)
+    video_keyword_reward = brain_tumor_3d_video_keyword_reward(predict_str)
     format_reward = brain_tumor_3d_format_reward(predict_str)
     iou_reward = brain_tumor_3d_iou_reward(predict_str, ground_truth)
     peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth)
@@ -285,11 +312,12 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
     completeness_reward = brain_tumor_3d_completeness_reward(predict_str)
     non_repeat_reward = brain_tumor_3d_non_repeat_reward(predict_str)
 
-    total_reward = thinking_format_reward + format_reward + iou_reward + peak_slice_reward + ratio_reward + completeness_reward + non_repeat_reward
+    total_reward = thinking_format_reward + video_keyword_reward + format_reward + iou_reward + peak_slice_reward + ratio_reward + completeness_reward + non_repeat_reward
 
     if return_details:
         details = {
             'thinking_format': thinking_format_reward,
+            'video_keyword': video_keyword_reward,
             'format': format_reward,
             'iou': iou_reward,
             'peak_slice': peak_slice_reward,
@@ -388,15 +416,17 @@ def compute_3d_iou(box1, box2):
 
 
 if __name__ == "__main__":
-    # 测试代码（模仿Seg-Zero的格式）
-    predict_str = """<think>Analyzing the MRI sequence, tumor is located in right hemisphere, spanning slices 102-143</think><answer>[{"bbox_3d": [91, 33, 102, 131, 84, 150], "peak_slice": 124, "tumor_ratio": 0.022}]</answer>"""
+    # 测试代码（模仿Seg-Zero的格式，使用"This video shows"开头）
+    predict_str = """<think>This video shows an MRI sequence where tumor is located in right hemisphere, spanning slices 102-143</think><answer>[{"bbox_3d": [91, 33, 102, 131, 84, 150], "peak_slice": 124, "tumor_ratio": 0.022}]</answer>"""
     ground_truth = """[{"bbox_3d": [91, 33, 102, 131, 84, 150], "peak_slice": 124, "tumor_ratio": 0.021957}]"""
 
-    score = brain_tumor_3d_compute_score(predict_str, ground_truth)
-    print(f"Total score: {score}/6.5")
+    score, details = brain_tumor_3d_compute_score(predict_str, ground_truth, return_details=True)
+    print(f"Total score: {score}/7.5")
 
     # 测试各个组件
+    print(f"\nDetailed breakdown:")
     print(f"Thinking format reward: {brain_tumor_3d_thinking_format_reward(predict_str)}")
+    print(f"Video keyword reward: {brain_tumor_3d_video_keyword_reward(predict_str)}")
     print(f"Format reward: {brain_tumor_3d_format_reward(predict_str)}")
     print(f"IoU reward: {brain_tumor_3d_iou_reward(predict_str, ground_truth)}")
     print(f"Peak slice reward: {brain_tumor_3d_peak_slice_reward(predict_str, ground_truth)}")

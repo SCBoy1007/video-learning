@@ -83,23 +83,25 @@ Logs are automatically sent to **Weights & Biases** (project: `brain_tumor_3d_4x
 
 ## Reward Function
 
-The custom reward function evaluates predictions across multiple dimensions (max score: 5.5):
+The custom reward function evaluates predictions across multiple dimensions (max score: 7.5):
 
-1. **Format Reward** (1.0): Valid JSON structure
-2. **3D IoU Reward** (1.5): Bounding box overlap
+1. **Thinking Format Reward** (1.0): Strict `<think>...</think><answer>...</answer>` format (aligned with Seg-Zero)
+2. **Video Keyword Reward** (1.0): Thinking must start with "This video shows" to reinforce video awareness
+3. **Format Reward** (1.0): Valid JSON structure with required fields
+4. **3D IoU Reward** (1.5): Bounding box overlap
    - IoU > 0.7: 1.5 points
    - IoU > 0.5: 1.0 points
    - IoU > 0.3: 0.5 points
-3. **Peak Slice Reward** (1.0): Accuracy of peak tumor slice
+5. **Peak Slice Reward** (1.0): Accuracy of peak tumor slice
    - Error ≤3: 1.0 points
    - Error ≤5: 0.7 points
    - Error ≤10: 0.3 points
-4. **Tumor Ratio Reward** (1.0): Volume estimation accuracy
+6. **Tumor Ratio Reward** (1.0): Volume estimation accuracy
    - Error ≤10%: 1.0 points
    - Error ≤20%: 0.7 points
    - Error ≤30%: 0.3 points
-5. **Completeness Reward** (0.5): All required fields present
-6. **Non-repetition Reward** (0.5): Output quality check
+7. **Completeness Reward** (0.5): All required fields present
+8. **Non-repetition Reward** (0.5): Output quality check
 
 See implementation: [`verl/utils/reward_score/brain_tumor_3d.py`](verl/utils/reward_score/brain_tumor_3d.py)
 
