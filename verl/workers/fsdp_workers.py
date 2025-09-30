@@ -395,10 +395,13 @@ class FSDPWorker(Worker):
             load_fsdp_optimizer(optimizer=self.optimizer)
 
         log_gpu_memory_usage("Before update policy")
-        print(f"[Rank {self.rank}] Before preprocess: data size = {len(data)}")
+        import sys
+        print(f"[Rank {self.rank}] Before preprocess: data size = {len(data)}", flush=True)
+        sys.stdout.flush()
         with self.ulysses_sharding_manager:
             data = self.ulysses_sharding_manager.preprocess_data(data=data)
-            print(f"[Rank {self.rank}] After preprocess: data size = {len(data)}, global_batch_size_per_device = {self.config.actor.global_batch_size_per_device}")
+            print(f"[Rank {self.rank}] After preprocess: data size = {len(data)}, global_batch_size_per_device = {self.config.actor.global_batch_size_per_device}", flush=True)
+            sys.stdout.flush()
             with Timer(name="update_policy", logger=None) as timer:
                 metrics = self.actor.update_policy(data=data)
 

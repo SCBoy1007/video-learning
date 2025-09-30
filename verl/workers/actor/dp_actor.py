@@ -156,8 +156,10 @@ class DataParallelPPOActor(BasePPOActor):
             non_tensor_select_keys = None
 
         # Diagnostic output for global_batch_size_per_device (all ranks)
-        print(f"[Rank {self.rank}] DEBUG update_policy: global_batch_size_per_device = {self.config.global_batch_size_per_device}")
-        print(f"[Rank {self.rank}] DEBUG update_policy: data batch size = {len(data)}")
+        import sys
+        print(f"[Rank {self.rank}] DEBUG update_policy: global_batch_size_per_device = {self.config.global_batch_size_per_device}", flush=True)
+        print(f"[Rank {self.rank}] DEBUG update_policy: data batch size = {len(data)}", flush=True)
+        sys.stdout.flush()
 
         # TODO (yaowei): support ppo epochs
         # Split to make minibatch iterator for updating the actor
