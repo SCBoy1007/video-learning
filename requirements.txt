@@ -22,3 +22,4 @@ tensordict
 transformers==4.51.3
 vllm==0.8.5.post1
 wandb
+decord
