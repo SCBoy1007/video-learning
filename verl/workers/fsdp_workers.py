@@ -67,7 +67,9 @@ class FSDPWorker(Worker):
         role: Literal["actor", "critic", "rollout", "ref", "actor_rollout", "actor_rollout_ref"],
     ):
         super().__init__()
-        self.config = config
+        # Deep copy config to avoid sharing mutable state across Ray workers
+        import copy
+        self.config = copy.deepcopy(config)
 
         if not dist.is_initialized():
             dist.init_process_group(backend="nccl")
