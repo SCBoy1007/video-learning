@@ -37,8 +37,36 @@ def collate_fn(features: List[Dict[str, Any]]) -> Dict[str, Any]:
             else:
                 non_tensors[key].append(value)
 
+    # Handle variable-length sequences with left padding
     for key, value in tensors.items():
-        if key not in ["pixel_values", "image_grid_thw"]:
+        if key in ["pixel_values", "image_grid_thw"]:
+            # Keep as list (visual features handled separately)
+            continue
+        elif key in ["input_ids", "attention_mask", "position_ids"]:
+            # Pad to max length in batch (left padding for decoder-only models)
+            max_len = max(t.shape[-1] for t in value)
+            padded = []
+            for t in value:
+                pad_len = max_len - t.shape[-1]
+                if pad_len > 0:
+                    # Determine padding value
+                    if key == "input_ids":
+                        pad_value = 0  # Standard pad token
+                    elif key == "attention_mask":
+                        pad_value = 0  # Masked positions
+                    else:  # position_ids
+                        pad_value = 0
+                    # Left pad (prepend padding)
+                    if t.dim() == 1:
+                        padding = torch.full((pad_len,), pad_value, dtype=t.dtype, device=t.device)
+                        t = torch.cat([padding, t], dim=0)
+                    else:  # position_ids with shape (3, seq_len)
+                        padding = torch.full((t.shape[0], pad_len), pad_value, dtype=t.dtype, device=t.device)
+                        t = torch.cat([padding, t], dim=1)
+                padded.append(t)
+            tensors[key] = torch.stack(padded, dim=0)
+        else:
+            # Stack other tensors directly
             tensors[key] = torch.stack(value, dim=0)
 
     return {**tensors, **non_tensors}
