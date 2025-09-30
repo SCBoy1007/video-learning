@@ -256,7 +256,7 @@ def brain_tumor_3d_non_repeat_reward(predict_str: str) -> float:
     return non_repeat_reward
 
 
-def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str) -> float:
+def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_details: bool = False):
     """
     3D脑肿瘤检测总奖励函数 (最高6.5分)
 
@@ -268,6 +268,14 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str) -> float:
     - 肿瘤比例奖励: 1.0分
     - 完整性奖励: 0.5分
     - 防重复奖励: 0.5分
+
+    Args:
+        predict_str: 模型预测字符串
+        ground_truth: Ground truth JSON字符串
+        return_details: 如果为True，返回(total_score, details_dict)，否则只返回total_score
+
+    Returns:
+        float or tuple: 总分或(总分, 详细字典)
     """
     thinking_format_reward = brain_tumor_3d_thinking_format_reward(predict_str)
     format_reward = brain_tumor_3d_format_reward(predict_str)
@@ -278,6 +286,19 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str) -> float:
     non_repeat_reward = brain_tumor_3d_non_repeat_reward(predict_str)
 
     total_reward = thinking_format_reward + format_reward + iou_reward + peak_slice_reward + ratio_reward + completeness_reward + non_repeat_reward
+
+    if return_details:
+        details = {
+            'thinking_format': thinking_format_reward,
+            'format': format_reward,
+            'iou': iou_reward,
+            'peak_slice': peak_slice_reward,
+            'tumor_ratio': ratio_reward,
+            'completeness': completeness_reward,
+            'non_repeat': non_repeat_reward,
+            'total': total_reward
+        }
+        return total_reward, details
 
     return total_reward
 

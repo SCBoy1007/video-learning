@@ -24,6 +24,7 @@ class CustomRewardManager:
     def __init__(self, tokenizer: PreTrainedTokenizer, num_examine: int, compute_score: str):
         self.tokenizer = tokenizer
         self.num_examine = num_examine
+        self.compute_score_name = compute_score
         if compute_score == "math":
             self.compute_score = math_compute_score
         elif compute_score == "r1v":
@@ -39,9 +40,24 @@ class CustomRewardManager:
         else:
             raise NotImplementedError()
 
+        # Track if this compute_score supports detailed metrics
+        self.supports_details = compute_score in ["brain_tumor_3d"]
+
     def __call__(self, data: DataProto) -> torch.Tensor:
         reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
         already_print_detail = 0
+
+        # Initialize metric accumulators for detailed tracking
+        if self.supports_details:
+            metric_accumulators = {
+                'thinking_format': [],
+                'format': [],
+                'iou': [],
+                'peak_slice': [],
+                'tumor_ratio': [],
+                'completeness': [],
+                'non_repeat': []
+            }
 
         for i in range(len(data)):
             data_item = data[i]  # DataProtoItem
@@ -64,7 +80,15 @@ class CustomRewardManager:
             ground_truth = data_item.non_tensor_batch["solution"]
             # print(ground_truth,response_str)
 
-            score = self.compute_score(response_str, ground_truth)
+            # Get score with optional details
+            if self.supports_details:
+                score, details = self.compute_score(response_str, ground_truth, return_details=True)
+                # Accumulate sub-metrics
+                for key in metric_accumulators:
+                    metric_accumulators[key].append(details[key])
+            else:
+                score = self.compute_score(response_str, ground_truth)
+
             reward_tensor[i, valid_response_length - 1] = score
 
             # Print first sample's full details per batch
@@ -74,8 +98,27 @@ class CustomRewardManager:
                 print("[response]", response_str)
                 print("[ground_truth]", ground_truth)
                 print(f"[score] {score:.3f}")
+
+                # Print sub-metric breakdown for brain_tumor_3d
+                if self.supports_details:
+                    print(f"  └─ thinking_format: {details['thinking_format']:.2f}/1.0 | "
+                          f"format: {details['format']:.2f}/1.0 | "
+                          f"iou: {details['iou']:.2f}/1.5")
+                    print(f"  └─ peak_slice: {details['peak_slice']:.2f}/1.0 | "
+                          f"tumor_ratio: {details['tumor_ratio']:.2f}/1.0 | "
+                          f"completeness: {details['completeness']:.2f}/0.5 | "
+                          f"non_repeat: {details['non_repeat']:.2f}/0.5")
             else:
                 # Print only score for remaining samples
                 print(f"[score {i+1}] {score:.3f}")
+
+        # Store aggregated metrics in data for later logging
+        if self.supports_details:
+            if not hasattr(data, 'reward_metrics'):
+                data.reward_metrics = {}
+            for key, values in metric_accumulators.items():
+                data.reward_metrics[f'reward/{key}/mean'] = sum(values) / len(values) if values else 0.0
+                data.reward_metrics[f'reward/{key}/max'] = max(values) if values else 0.0
+                data.reward_metrics[f'reward/{key}/min'] = min(values) if values else 0.0
 
         return reward_tensor

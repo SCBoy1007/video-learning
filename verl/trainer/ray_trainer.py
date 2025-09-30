@@ -271,6 +271,11 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True):
         "prompt_length/min": torch.min(prompt_length).detach().item(),
         "prompt_length/clip_ratio": torch.mean(torch.eq(prompt_length, max_prompt_length).float()).detach().item(),
     }
+
+    # Add detailed reward sub-metrics if available (from CustomRewardManager)
+    if hasattr(batch, 'reward_metrics'):
+        metrics.update(batch.reward_metrics)
+
     return metrics
 
 
