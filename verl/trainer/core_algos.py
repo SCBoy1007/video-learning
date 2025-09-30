@@ -160,7 +160,8 @@ def compute_grpo_outcome_advantage(
                 # Fix 1: Remove extra brackets that create wrong tensor shape
                 std_val = torch.std(torch.tensor(id2score[idx]))
                 # Fix 2: Clamp std to prevent numerical instability when scores are too similar
-                id2std[idx] = torch.maximum(std_val, torch.tensor(0.1))
+                # Increased from 0.1 to 0.3 to handle low reward variance
+                id2std[idx] = torch.maximum(std_val, torch.tensor(0.3))
             else:
                 raise ValueError(f"no score in prompt index: {idx}")
         for i in range(bsz):

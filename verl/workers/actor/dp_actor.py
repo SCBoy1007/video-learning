@@ -226,6 +226,30 @@ class DataParallelPPOActor(BasePPOActor):
             grad_norm = self._optimizer_step()
             append_to_dict(metrics, {"actor/grad_norm": grad_norm.detach().item()})
 
+            # Compute true PPO KL after optimizer step
+            # This measures actual policy change (post-update vs pre-update)
+            if i == n - 1:  # Only compute on last mini-batch to save time
+                true_ppo_kls = []
+                with torch.no_grad():
+                    for micro_batch in micro_batches:
+                        micro_batch.to("cuda")
+                        model_inputs = {**micro_batch.batch, **micro_batch.non_tensor_batch}
+                        responses = model_inputs["responses"]
+                        response_length = responses.size(1)
+                        attention_mask = model_inputs["attention_mask"]
+                        response_mask = attention_mask[:, -response_length:]
+                        old_log_prob = model_inputs["old_log_probs"]
+
+                        # Re-compute log_prob with updated model
+                        _, new_log_prob = self._forward_micro_batch(model_inputs, temperature=temperature)
+
+                        # True KL: updated policy vs pre-update policy
+                        kl_div = verl_F.masked_mean(old_log_prob - new_log_prob, response_mask)
+                        true_ppo_kls.append(kl_div.item())
+
+                avg_true_ppo_kl = sum(true_ppo_kls) / len(true_ppo_kls)
+                append_to_dict(metrics, {"actor/ppo_kl_true": avg_true_ppo_kl})
+
         self.actor_optimizer.zero_grad()
 
         return metrics
