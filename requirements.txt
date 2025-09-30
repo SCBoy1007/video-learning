@@ -15,7 +15,6 @@ qwen-vl-utils
 scipy
 matplotlib
 ipykernel
-sam2
 pycocotools
 scikit-image
 ray
