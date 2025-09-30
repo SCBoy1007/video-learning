@@ -200,6 +200,7 @@ class RLHFDataset(Dataset):
         # Handle video data
         if "video_path" in row_dict:
             import os
+            from decord import VideoReader
             # Construct video file path using per-sample root_path or fallback to data_path
             root_path = row_dict.get("root_path", self.data_path)
             if root_path is None:
@@ -207,8 +208,12 @@ class RLHFDataset(Dataset):
             video_file_path = os.path.join(root_path, row_dict["video_path"])
             raw_prompt = prompt.replace("<video>", "<|vision_start|><|video_pad|><|vision_end|>")
 
-            # Use video processor to handle video file
-            video_inputs = self.processor(videos=[video_file_path], return_tensors="pt")
+            # Load video frames using decord (processor doesn't accept path strings)
+            vr = VideoReader(video_file_path)
+            video_frames = vr.get_batch(list(range(len(vr)))).asnumpy()
+
+            # Use video processor to handle loaded video frames
+            video_inputs = self.processor(videos=[video_frames], return_tensors="pt")
             video_grid_thw = video_inputs.get("video_grid_thw", None)
             row_dict.update(video_inputs)
 
