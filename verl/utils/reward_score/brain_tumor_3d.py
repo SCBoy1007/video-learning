@@ -358,10 +358,10 @@ def extract_json_from_text(text: str):
     从文本中提取JSON数据
     支持多种格式：列表格式、单对象格式、包含其他文字的格式
     """
-    # 尝试多种JSON提取模式
+    # 尝试多种JSON提取模式 (使用贪婪匹配来正确处理嵌套结构)
     patterns = [
-        r'\[\s*\{.*?\}\s*\]',  # 列表格式 [{"key": "value"}]
-        r'\{[^{}]*\}',         # 单个对象格式 {"key": "value"}
+        r'\[.*\]',  # 列表格式 [{"key": "value"}] - 贪婪匹配整个数组
+        r'\{.*\}',  # 单个对象格式 {"key": "value"} - 贪婪匹配整个对象
     ]
 
     for pattern in patterns:
