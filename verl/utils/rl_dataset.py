@@ -162,10 +162,8 @@ class RLHFDataset(Dataset):
                 "Analyze the video frames to determine tumor boundaries, peak location, and volume.\n" \
                 "Output the thinking process in <think> </think> and final answer in <answer> </answer> tags.\n" \
                 "Start your thinking with 'This video shows' to describe what you observe.\n" \
-                "Output the 3D bounding box coordinates, peak slice index, and tumor volume ratio in JSON format.\n" \
-                "Note: bbox_3d format is [x_min, y_min, z_min, x_max, y_max, z_max] where (x,y) are spatial coordinates and z is the slice index.\n" \
-                "i.e., <think> This video shows an MRI sequence where tumor appears in right hemisphere starting at slice 102. Peak intensity at slice 124. Estimating volume as 2.2% based on bbox dimensions </think>\n" \
-                '<answer>[{{"bbox_3d": [91, 33, 102, 131, 84, 150], "peak_slice": 124, "tumor_ratio": 0.022}}]</answer>'
+                "Output format: <answer>[{{\"bbox_3d\": [x_min, y_min, z_min, x_max, y_max, z_max], \"peak_slice\": <int>, \"tumor_ratio\": <float>}}]</answer>\n" \
+                "Note: (x,y) are spatial coordinates and z is the slice index."
         else:
             # Original image prompt
             self.user_prompt = "<image>\n" \

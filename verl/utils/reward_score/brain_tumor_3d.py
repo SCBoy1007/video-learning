@@ -285,13 +285,13 @@ def brain_tumor_3d_non_repeat_reward(predict_str: str) -> float:
 
 # Reward weights configuration (centralized for easy tuning)
 REWARD_WEIGHTS = {
-    'thinking_format': 0.5,  # 降低，容易达到
-    'video_keyword': 0.5,    # 降低，容易达到
-    'format': 1.0,           # 保持，基础要求
-    'iou': 3.0,              # 加倍，核心任务 (原 1.5 → 3.0)
-    'peak_slice': 1.5,       # 提升，重要指标 (原 1.0 → 1.5)
-    'tumor_ratio': 1.5,      # 提升，重要指标 (原 1.0 → 1.5)
-    'non_repeat': 0.5,       # 保持
+    'thinking_format': 0.3,  # 降低格式分权重
+    'video_keyword': 0.2,    # 降低格式分权重
+    'format': 0.5,           # 降低格式分权重
+    'iou': 5.0,              # 大幅提高核心任务权重
+    'peak_slice': 2.0,       # 提高重要指标权重
+    'tumor_ratio': 2.0,      # 提高重要指标权重
+    # non_repeat removed - should be handled during sampling, not as reward
 }
 
 
@@ -302,21 +302,21 @@ def get_reward_weights():
 
 def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_details: bool = False):
     """
-    3D脑肿瘤检测总奖励函数 (最高8.5分)
+    3D脑肿瘤检测总奖励函数 (最高10.0分)
 
-    组成（调整权重以增加奖励方差）：
-    - 思维格式奖励: 0.5分 (降低，容易达到)
-    - 视频关键词奖励: 0.5分 (降低，容易达到)
-    - 格式奖励: 1.0分 (保持，基础要求)
-    - 3D IoU奖励: 3.0分 (加倍，核心任务)
-    - 峰值切片奖励: 1.5分 (提升，重要指标)
-    - 肿瘤比例奖励: 1.5分 (提升，重要指标)
-    - 防重复奖励: 0.5分 (保持)
+    组成（重新平衡权重）：
+    - 思维格式奖励: 0.3分 (降低格式分)
+    - 视频关键词奖励: 0.2分 (降低格式分)
+    - 格式奖励: 0.5分 (降低格式分)
+    - 3D IoU奖励: 5.0分 (大幅提高核心任务)
+    - 峰值切片奖励: 2.0分 (提高重要指标)
+    - 肿瘤比例奖励: 2.0分 (提高重要指标)
 
-    注意：completeness奖励已删除（与format奖励100%重复）
+    注意：
+    - completeness奖励已删除（与format奖励100%重复）
+    - non_repeat奖励已删除（应在采样阶段控制，不作为reward）
 
-    目标：降低容易获得的格式奖励权重，提高任务相关奖励权重，
-         增加奖励方差，强化任务学习信号。
+    目标：强制模型focus在真正的任务上（IoU/Peak/Ratio），而不是刷格式分
 
     Args:
         predict_str: 模型预测字符串
@@ -333,9 +333,8 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
     iou_reward = brain_tumor_3d_iou_reward(predict_str, ground_truth) * REWARD_WEIGHTS['iou']
     peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['peak_slice']
     ratio_reward = brain_tumor_3d_ratio_reward(predict_str, ground_truth) * REWARD_WEIGHTS['tumor_ratio']
-    non_repeat_reward = brain_tumor_3d_non_repeat_reward(predict_str) * REWARD_WEIGHTS['non_repeat']
 
-    total_reward = thinking_format_reward + video_keyword_reward + format_reward + iou_reward + peak_slice_reward + ratio_reward + non_repeat_reward
+    total_reward = thinking_format_reward + video_keyword_reward + format_reward + iou_reward + peak_slice_reward + ratio_reward
 
     if return_details:
         details = {
@@ -345,7 +344,6 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
             'iou': iou_reward,
             'peak_slice': peak_slice_reward,
             'tumor_ratio': ratio_reward,
-            'non_repeat': non_repeat_reward,
             'total': total_reward
         }
         return total_reward, details
@@ -443,7 +441,7 @@ if __name__ == "__main__":
     ground_truth = """[{"bbox_3d": [91, 33, 102, 131, 84, 150], "peak_slice": 124, "tumor_ratio": 0.021957}]"""
 
     score, details = brain_tumor_3d_compute_score(predict_str, ground_truth, return_details=True)
-    print(f"Total score: {score}/8.5")
+    print(f"Total score: {score}/10.0")
 
     # 测试各个组件
     print(f"\nDetailed breakdown:")
@@ -453,4 +451,3 @@ if __name__ == "__main__":
     print(f"IoU reward: {brain_tumor_3d_iou_reward(predict_str, ground_truth)}")
     print(f"Peak slice reward: {brain_tumor_3d_peak_slice_reward(predict_str, ground_truth)}")
     print(f"Ratio reward: {brain_tumor_3d_ratio_reward(predict_str, ground_truth)}")
-    print(f"Non-repeat reward: {brain_tumor_3d_non_repeat_reward(predict_str)}")
