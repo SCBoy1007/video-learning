@@ -29,8 +29,8 @@ python3 -m verl.trainer.main \
     data.train_files=${TRAIN_DATA} \
     data.val_files=${VAL_DATA} \
     worker.actor.model.model_path=${MODEL_PATH} \
-    worker.actor.kl_loss_coef=5.0e-2 \
-    worker.actor.optim.lr=1.0e-5 \
+    worker.actor.kl_loss_coef=1.0e-2 \
+    worker.actor.optim.lr=3.0e-5 \
     worker.actor.micro_batch_size_per_device_for_update=1 \
     worker.rollout.enable_chunked_prefill=false \
     worker.rollout.n=8 \

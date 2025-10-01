@@ -56,7 +56,6 @@ class CustomRewardManager:
                 'iou': [],
                 'peak_slice': [],
                 'tumor_ratio': [],
-                'completeness': [],
                 'non_repeat': []
             }
 
@@ -110,7 +109,7 @@ class CustomRewardManager:
                         # Fallback to default if import fails
                         weights = {
                             'thinking_format': 0.5, 'video_keyword': 0.5, 'format': 1.0, 'iou': 3.0,
-                            'peak_slice': 1.5, 'tumor_ratio': 1.5, 'completeness': 0.5, 'non_repeat': 0.5
+                            'peak_slice': 1.5, 'tumor_ratio': 1.5, 'non_repeat': 0.5
                         }
 
                     print(f"  └─ thinking_format: {details['thinking_format']:.2f}/{weights['thinking_format']:.1f} | "
@@ -119,7 +118,6 @@ class CustomRewardManager:
                           f"iou: {details['iou']:.2f}/{weights['iou']:.1f}")
                     print(f"  └─ peak_slice: {details['peak_slice']:.2f}/{weights['peak_slice']:.1f} | "
                           f"tumor_ratio: {details['tumor_ratio']:.2f}/{weights['tumor_ratio']:.1f} | "
-                          f"completeness: {details['completeness']:.2f}/{weights['completeness']:.1f} | "
                           f"non_repeat: {details['non_repeat']:.2f}/{weights['non_repeat']:.1f}")
             else:
                 # Print only score for remaining samples

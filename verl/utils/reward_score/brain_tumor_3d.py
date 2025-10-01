@@ -99,8 +99,21 @@ def brain_tumor_3d_format_reward(predict_str: str) -> float:
 
 def brain_tumor_3d_iou_reward(predict_str: str, ground_truth: str) -> float:
     """
-    3D边界框IoU奖励 (最高1.5分)
-    IoU > 0.7: 1.5分, IoU > 0.5: 1.0分, IoU > 0.3: 0.5分, 其他: 0.0分
+    3D边界框IoU奖励 (最高1.0分，归一化后乘权重3.0)
+
+    平滑给分策略：
+    - 有效3D框（体积>0）: 基础分 0.1
+    - 与GT有任何重叠（IoU>0）: 额外 0.2
+    - IoU线性映射: IoU × 0.7 (IoU=1.0时满分0.7)
+    - 总分 = 0.1 + 0.2(if overlap) + IoU×0.7
+
+    示例：
+    - 无效框: 0.0
+    - 有效但不重叠: 0.1
+    - IoU=0.01: 0.1 + 0.2 + 0.007 = 0.307
+    - IoU=0.3: 0.1 + 0.2 + 0.21 = 0.51
+    - IoU=0.7: 0.1 + 0.2 + 0.49 = 0.79
+    - IoU=1.0: 0.1 + 0.2 + 0.7 = 1.0
     """
     try:
         # 解析ground truth
@@ -119,18 +132,40 @@ def brain_tumor_3d_iou_reward(predict_str: str, ground_truth: str) -> float:
 
         pred_bbox = pred_data[0]['bbox_3d']
 
+        # 验证是否为有效3D框（6个数值，且体积>0）
+        if not isinstance(pred_bbox, list) or len(pred_bbox) != 6:
+            return 0.0
+
+        try:
+            pred_bbox = [float(x) for x in pred_bbox]
+        except (ValueError, TypeError):
+            return 0.0
+
+        # 计算预测框体积（规范化坐标顺序）
+        x1, y1, z1 = min(pred_bbox[0], pred_bbox[3]), min(pred_bbox[1], pred_bbox[4]), min(pred_bbox[2], pred_bbox[5])
+        x2, y2, z2 = max(pred_bbox[0], pred_bbox[3]), max(pred_bbox[1], pred_bbox[4]), max(pred_bbox[2], pred_bbox[5])
+        pred_volume = (x2 - x1) * (y2 - y1) * (z2 - z1)
+
+        # 如果预测框无效（体积≤0），返回0
+        if pred_volume <= 0:
+            return 0.0
+
+        # 基础分：有效框就给0.1
+        base_score = 0.1
+
         # 计算3D IoU
         iou = compute_3d_iou(pred_bbox, gt_bbox)
 
-        # 分级奖励
-        if iou > 0.7:
-            return 1.5
-        elif iou > 0.5:
-            return 1.0
-        elif iou > 0.3:
-            return 0.5
-        else:
-            return 0.0
+        # 重叠奖励：只要有任何重叠就额外给0.2
+        overlap_bonus = 0.2 if iou > 0 else 0.0
+
+        # IoU线性奖励：IoU越高分越高
+        iou_score = iou * 0.7
+
+        # 总分 = 基础分 + 重叠奖励 + IoU线性分
+        total = base_score + overlap_bonus + iou_score
+
+        return min(1.0, total)  # 确保不超过1.0
 
     except Exception:
         return 0.0
@@ -218,39 +253,6 @@ def brain_tumor_3d_ratio_reward(predict_str: str, ground_truth: str) -> float:
         return 0.0
 
 
-def brain_tumor_3d_completeness_reward(predict_str: str) -> float:
-    """
-    完整性奖励 (返回0-1标准化分数，外部乘权重)
-    检查是否包含所有必需字段
-    """
-    try:
-        # 优先从<answer>标签内提取JSON
-        answer_pattern = r'<answer>(.*?)</answer>'
-        answer_match = re.search(answer_pattern, predict_str, re.DOTALL | re.IGNORECASE)
-        json_text = answer_match.group(1) if answer_match else predict_str
-
-        json_data = extract_json_from_text(json_text)
-        if not json_data:
-            return 0.0
-
-        required_fields = ['bbox_3d', 'peak_slice', 'tumor_ratio']
-
-        for item in json_data:
-            # 检查所有必需字段是否存在且非空
-            for field in required_fields:
-                if field not in item or item[field] is None:
-                    return 0.0
-
-            # 检查bbox_3d的长度
-            if len(item['bbox_3d']) != 6:
-                return 0.0
-
-        return 1.0  # 返回标准化分数，外部乘权重0.5
-
-    except Exception:
-        return 0.0
-
-
 def brain_tumor_3d_non_repeat_reward(predict_str: str) -> float:
     """
     防重复奖励 (返回0-1标准化分数，外部乘权重)
@@ -289,7 +291,6 @@ REWARD_WEIGHTS = {
     'iou': 3.0,              # 加倍，核心任务 (原 1.5 → 3.0)
     'peak_slice': 1.5,       # 提升，重要指标 (原 1.0 → 1.5)
     'tumor_ratio': 1.5,      # 提升，重要指标 (原 1.0 → 1.5)
-    'completeness': 0.5,     # 保持
     'non_repeat': 0.5,       # 保持
 }
 
@@ -301,7 +302,7 @@ def get_reward_weights():
 
 def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_details: bool = False):
     """
-    3D脑肿瘤检测总奖励函数 (最高9.0分)
+    3D脑肿瘤检测总奖励函数 (最高8.5分)
 
     组成（调整权重以增加奖励方差）：
     - 思维格式奖励: 0.5分 (降低，容易达到)
@@ -310,8 +311,9 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
     - 3D IoU奖励: 3.0分 (加倍，核心任务)
     - 峰值切片奖励: 1.5分 (提升，重要指标)
     - 肿瘤比例奖励: 1.5分 (提升，重要指标)
-    - 完整性奖励: 0.5分 (保持)
     - 防重复奖励: 0.5分 (保持)
+
+    注意：completeness奖励已删除（与format奖励100%重复）
 
     目标：降低容易获得的格式奖励权重，提高任务相关奖励权重，
          增加奖励方差，强化任务学习信号。
@@ -331,10 +333,9 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
     iou_reward = brain_tumor_3d_iou_reward(predict_str, ground_truth) * REWARD_WEIGHTS['iou']
     peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['peak_slice']
     ratio_reward = brain_tumor_3d_ratio_reward(predict_str, ground_truth) * REWARD_WEIGHTS['tumor_ratio']
-    completeness_reward = brain_tumor_3d_completeness_reward(predict_str) * REWARD_WEIGHTS['completeness']
     non_repeat_reward = brain_tumor_3d_non_repeat_reward(predict_str) * REWARD_WEIGHTS['non_repeat']
 
-    total_reward = thinking_format_reward + video_keyword_reward + format_reward + iou_reward + peak_slice_reward + ratio_reward + completeness_reward + non_repeat_reward
+    total_reward = thinking_format_reward + video_keyword_reward + format_reward + iou_reward + peak_slice_reward + ratio_reward + non_repeat_reward
 
     if return_details:
         details = {
@@ -344,7 +345,6 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
             'iou': iou_reward,
             'peak_slice': peak_slice_reward,
             'tumor_ratio': ratio_reward,
-            'completeness': completeness_reward,
             'non_repeat': non_repeat_reward,
             'total': total_reward
         }
@@ -443,7 +443,7 @@ if __name__ == "__main__":
     ground_truth = """[{"bbox_3d": [91, 33, 102, 131, 84, 150], "peak_slice": 124, "tumor_ratio": 0.021957}]"""
 
     score, details = brain_tumor_3d_compute_score(predict_str, ground_truth, return_details=True)
-    print(f"Total score: {score}/7.5")
+    print(f"Total score: {score}/8.5")
 
     # 测试各个组件
     print(f"\nDetailed breakdown:")
@@ -453,5 +453,4 @@ if __name__ == "__main__":
     print(f"IoU reward: {brain_tumor_3d_iou_reward(predict_str, ground_truth)}")
     print(f"Peak slice reward: {brain_tumor_3d_peak_slice_reward(predict_str, ground_truth)}")
     print(f"Ratio reward: {brain_tumor_3d_ratio_reward(predict_str, ground_truth)}")
-    print(f"Completeness reward: {brain_tumor_3d_completeness_reward(predict_str)}")
     print(f"Non-repeat reward: {brain_tumor_3d_non_repeat_reward(predict_str)}")

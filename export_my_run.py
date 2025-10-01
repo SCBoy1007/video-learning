@@ -8,7 +8,7 @@ import pandas as pd
 # Your run information
 ENTITY = "shichang855-the-university-of-hong-kong"
 PROJECT = "brain_tumor_3d_4x80G"
-RUN_ID = "7txbdipl"  # Update this to your current run ID
+RUN_ID = "6pzbu1ix"  # Update this to your current run ID
 
 def export_run():
     print("Connecting to WandB...")
