@@ -19,13 +19,34 @@ import numpy as np
 
 def brain_tumor_3d_thinking_format_reward(predict_str: str) -> float:
     """
-    思维格式奖励 (1.0分)
-    检查是否包含<think>和<answer>标签，模仿Seg-Zero的thinking_format_reward
-    使用search而非fullmatch以容忍输出前后的空白符
+    思维格式奖励 (1.0分) - 加强版
+    检查是否包含<think>和<answer>标签，且<think>内容质量合格
+
+    要求：
+    1. 必须有 <think>...</think> 和 <answer>...</answer> 标签
+    2. <think> 内容长度至少50字符（确保有实质性推理）
+    3. <think> 内容不能以 JSON 格式开头（[ 或 {）
     """
-    pattern = r"<think>.*?</think>\s*<answer>.*?</answer>"
-    match = re.search(pattern, predict_str.strip(), re.DOTALL | re.IGNORECASE)
-    return 1.0 if match else 0.0
+    try:
+        pattern = r"<think>(.*?)</think>\s*<answer>.*?</answer>"
+        match = re.search(pattern, predict_str.strip(), re.DOTALL | re.IGNORECASE)
+
+        if not match:
+            return 0.0
+
+        think_content = match.group(1).strip()
+
+        # 检查1：内容长度至少50字符
+        if len(think_content) < 50:
+            return 0.0
+
+        # 检查2：不能以JSON格式开头
+        if think_content.startswith('[') or think_content.startswith('{'):
+            return 0.0
+
+        return 1.0
+    except Exception:
+        return 0.0
 
 
 def brain_tumor_3d_video_keyword_reward(predict_str: str) -> float:
@@ -285,12 +306,12 @@ def brain_tumor_3d_non_repeat_reward(predict_str: str) -> float:
 
 # Reward weights configuration (centralized for easy tuning)
 REWARD_WEIGHTS = {
-    'thinking_format': 0.3,  # 降低格式分权重
-    'video_keyword': 0.2,    # 降低格式分权重
-    'format': 0.5,           # 降低格式分权重
-    'iou': 5.0,              # 大幅提高核心任务权重
-    'peak_slice': 2.0,       # 提高重要指标权重
-    'tumor_ratio': 2.0,      # 提高重要指标权重
+    'thinking_format': 0.5,  # 提高到0.5（确保有质量的推理过程）
+    'video_keyword': 0.5,    # 提高到0.5（视频分析的必要前提，作为门槛）
+    'format': 0.5,           # 保持不变
+    'iou': 5.0,              # 保持不变，核心任务
+    'peak_slice': 2.0,       # 保持不变
+    'tumor_ratio': 2.0,      # 保持不变
     # non_repeat removed - should be handled during sampling, not as reward
 }
 
@@ -302,21 +323,28 @@ def get_reward_weights():
 
 def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_details: bool = False):
     """
-    3D脑肿瘤检测总奖励函数 (最高10.0分)
+    3D脑肿瘤检测总奖励函数 (最高10.5分)
 
-    组成（重新平衡权重）：
-    - 思维格式奖励: 0.3分 (降低格式分)
-    - 视频关键词奖励: 0.2分 (降低格式分)
-    - 格式奖励: 0.5分 (降低格式分)
-    - 3D IoU奖励: 5.0分 (大幅提高核心任务)
-    - 峰值切片奖励: 2.0分 (提高重要指标)
-    - 肿瘤比例奖励: 2.0分 (提高重要指标)
+    组成（加强版权重 + 门槛机制）：
+    - 思维格式奖励: 0.5分 (必须有50+字符且非JSON的推理内容)
+    - 视频关键词奖励: 0.5分 (必须以"This video shows"开头，作为医学测量的门槛)
+    - 格式奖励: 0.5分 (JSON格式验证)
+    - 3D IoU奖励: 5.0分 (核心任务)
+    - 峰值切片奖励: 2.0分 (医学指标)
+    - 肿瘤比例奖励: 2.0分 (医学指标)
+
+    **门槛机制**：
+    如果 video_keyword = 0（未写"This video shows"），则 IoU、peak_slice、tumor_ratio 全部置0。
+    逻辑：没有视频分析推理，医学测量结果就是无效的。
 
     注意：
     - completeness奖励已删除（与format奖励100%重复）
     - non_repeat奖励已删除（应在采样阶段控制，不作为reward）
 
-    目标：强制模型focus在真正的任务上（IoU/Peak/Ratio），而不是刷格式分
+    目标：
+    1. 强制模型进行实质性的视频分析推理
+    2. 防止模型学会格式捷径而忽视推理内容
+    3. 确保医学测量基于视频观察而非随机猜测
 
     Args:
         predict_str: 模型预测字符串
@@ -328,11 +356,22 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
     """
     # Use centralized weights
     thinking_format_reward = brain_tumor_3d_thinking_format_reward(predict_str) * REWARD_WEIGHTS['thinking_format']
-    video_keyword_reward = brain_tumor_3d_video_keyword_reward(predict_str) * REWARD_WEIGHTS['video_keyword']
+
+    # Video keyword as a gate: if not satisfied, medical measurements are invalid
+    video_keyword_raw = brain_tumor_3d_video_keyword_reward(predict_str)
+    video_keyword_reward = video_keyword_raw * REWARD_WEIGHTS['video_keyword']
+
     format_reward = brain_tumor_3d_format_reward(predict_str) * REWARD_WEIGHTS['format']
-    iou_reward = brain_tumor_3d_iou_reward(predict_str, ground_truth) * REWARD_WEIGHTS['iou']
-    peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['peak_slice']
-    ratio_reward = brain_tumor_3d_ratio_reward(predict_str, ground_truth) * REWARD_WEIGHTS['tumor_ratio']
+
+    # If video_keyword not satisfied (== 0), all medical measurements are invalid
+    if video_keyword_raw == 0:
+        iou_reward = 0.0
+        peak_slice_reward = 0.0
+        ratio_reward = 0.0
+    else:
+        iou_reward = brain_tumor_3d_iou_reward(predict_str, ground_truth) * REWARD_WEIGHTS['iou']
+        peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['peak_slice']
+        ratio_reward = brain_tumor_3d_ratio_reward(predict_str, ground_truth) * REWARD_WEIGHTS['tumor_ratio']
 
     total_reward = thinking_format_reward + video_keyword_reward + format_reward + iou_reward + peak_slice_reward + ratio_reward
 
