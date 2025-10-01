@@ -1,6 +1,6 @@
 data:
-  train_files: None  # Will be overridden in training script
-  val_files: None   # Will be overridden in training script
+  train_files: None  # ⚠️ OVERRIDDEN by run_brain_tumor_3d_4x80G.sh
+  val_files: None    # ⚠️ OVERRIDDEN by run_brain_tumor_3d_4x80G.sh
   prompt_key: problem
   max_prompt_length: 28000  # Increased to accommodate video tokens (155 frames × ~130 tokens/frame ≈ 20k + text)
   max_response_length: 512  # Reduced from 2000 to prevent OOM from long JSON responses
@@ -12,22 +12,22 @@ data:
 
 algorithm:
   adv_estimator: grpo
-  kl_coef: 0.0
+  kl_coef: 0.0  # KL penalty in reward calculation (0.0 = disabled, use kl_loss_coef instead)
 
 worker:
   actor:
     global_batch_size: 16  # Increased to 16 to align with Seg-Zero
-    micro_batch_size_per_device_for_update: 1  # Reduced to 1 to avoid OOM in backward pass
-    micro_batch_size_per_device_for_experience: 1  # Reduced to 1 to match update batch size
+    micro_batch_size_per_device_for_update: 1  # ⚠️ OVERRIDDEN by .sh → 2
+    micro_batch_size_per_device_for_experience: 1  # ⚠️ OVERRIDDEN by .sh → 2
     max_grad_norm: 1.0
     use_kl_loss: true
-    kl_loss_coef: 1.0e-2  # Tuned to 1e-2 (3.3x original) for stable policy updates
+    kl_loss_coef: 1.0e-2  # ⚠️ OVERRIDDEN by .sh → 8.0e-2 (ACTUAL VALUE USED)
     kl_loss_type: low_var_kl
     model:
-      model_path: Qwen/Qwen2.5-VL-7B-Instruct
+      model_path: Qwen/Qwen2.5-VL-7B-Instruct  # ⚠️ OVERRIDDEN by .sh → local path
       enable_gradient_checkpointing: true
     optim:
-      lr: 3.0e-5  # Restored to 3e-5 for effective learning (after KL control fix)
+      lr: 3.0e-5  # ⚠️ OVERRIDDEN by .sh → 1.0e-5 (ACTUAL VALUE USED)
       weight_decay: 1.0e-2
       lr_warmup_steps_ratio: 0.0  # No warmup
       training_steps: 1725  # ~115 batches × 15 episodes (batch_size=16)
@@ -44,7 +44,7 @@ worker:
     tensor_parallel_size: 1  # Single GPU inference (7B model fits easily)
     gpu_memory_utilization: 0.55  # Further reduced from 0.6 to leave more room for FSDP
     n: 8  # Increased to 8 for better GRPO gradient estimation and exploration
-    enable_chunked_prefill: true
+    enable_chunked_prefill: true  # ⚠️ OVERRIDDEN by .sh → false (ACTUAL VALUE USED)
     max_num_batched_tokens: 32768  # Increased to handle video multi-modal embeddings
 
   ref:
