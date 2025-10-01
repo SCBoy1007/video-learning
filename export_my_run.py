@@ -8,7 +8,7 @@ import pandas as pd
 # Your run information
 ENTITY = "shichang855-the-university-of-hong-kong"
 PROJECT = "brain_tumor_3d_4x80G"
-RUN_ID = "085d4w55"  # Update this to your current run ID
+RUN_ID = "7txbdipl"  # Update this to your current run ID
 
 def export_run():
     print("Connecting to WandB...")
@@ -51,7 +51,11 @@ def export_run():
             if metric in latest:
                 val = latest[metric]
                 if pd.notna(val):
-                    print(f"  {metric:30s}: {val:.6f}")
+                    # Handle both numeric and string values
+                    if isinstance(val, (int, float)):
+                        print(f"  {metric:30s}: {val:.6f}")
+                    else:
+                        print(f"  {metric:30s}: {val}")
 
     return history
 
