@@ -19,13 +19,18 @@ import numpy as np
 
 def brain_tumor_3d_thinking_format_reward(predict_str: str) -> float:
     """
-    思维格式奖励 (1.0分) - 加强版
+    思维格式奖励 (1.0分) - 渐进式长度奖励
     检查是否包含<think>和<answer>标签，且<think>内容质量合格
 
-    要求：
-    1. 必须有 <think>...</think> 和 <answer>...</answer> 标签
-    2. <think> 内容长度至少50字符（确保有实质性推理）
-    3. <think> 内容不能以 JSON 格式开头（[ 或 {）
+    评分标准（基于长度）：
+    - < 50 字符: 0.0 分（不合格，直接拒绝）
+    - 50-100 字符: 0.3 分（基础，太简短）
+    - 100-150 字符: 0.6 分（合格）
+    - 150-200 字符: 0.8 分（良好）
+    - 200+ 字符: 1.0 分（优秀，鼓励详细推理）
+
+    额外检查：
+    - <think> 内容不能以 JSON 格式开头（[ 或 {）
     """
     try:
         pattern = r"<think>(.*?)</think>\s*<answer>.*?</answer>"
@@ -35,16 +40,24 @@ def brain_tumor_3d_thinking_format_reward(predict_str: str) -> float:
             return 0.0
 
         think_content = match.group(1).strip()
+        content_length = len(think_content)
 
-        # 检查1：内容长度至少50字符
-        if len(think_content) < 50:
-            return 0.0
-
-        # 检查2：不能以JSON格式开头
+        # 检查1：不能以JSON格式开头
         if think_content.startswith('[') or think_content.startswith('{'):
             return 0.0
 
-        return 1.0
+        # 检查2：基于长度的渐进式奖励
+        if content_length < 50:
+            return 0.0
+        elif content_length < 100:
+            return 0.3
+        elif content_length < 150:
+            return 0.6
+        elif content_length < 200:
+            return 0.8
+        else:  # >= 200
+            return 1.0
+
     except Exception:
         return 0.0
 
