@@ -12,19 +12,24 @@ Shell Script (.sh) > YAML Config (.yaml) > Code Defaults
 
 ---
 
-## Critical Parameters (⚠️ Shell Overrides YAML)
+## Parameter Organization Strategy
 
-These parameters have **different values** in YAML vs Shell script. The **shell value is the actual value used**.
+**Updated Strategy** (as of latest commit):
+- **YAML now contains the actual values** used in training
+- **Shell script only overrides**:
+  1. Dynamic parameters (data paths, experiment name) - must be in shell
+  2. Tuning parameters (kl_coef, lr) - kept in shell for quick experiments
 
-| Parameter | YAML Value | Shell Override | Why Override? |
-|-----------|------------|----------------|---------------|
-| `worker.actor.kl_loss_coef` | **0.01** | **0.08** ✅ | Tighten KL control to prevent policy collapse |
-| `worker.actor.optim.lr` | **3e-5** | **1e-5** ✅ | Reduce learning rate for stable training |
-| `worker.actor.micro_batch_size_*` | **1** | **2** | Balance between memory and training speed |
-| `worker.rollout.enable_chunked_prefill` | **true** | **false** | Avoid vLLM compatibility issues |
-| `worker.actor.model.model_path` | `Qwen/...` (HF) | Local path | Use local cache to avoid downloads |
+| Parameter Type | Location | Reason |
+|----------------|----------|--------|
+| `data.train_files` | Shell only | Dynamic, depends on experiment |
+| `trainer.experiment_name` | Shell only | Dynamic, depends on script name |
+| `worker.actor.kl_loss_coef` | YAML: 0.08<br>Shell: can override | Experiment tuning parameter |
+| `worker.actor.optim.lr` | YAML: 1e-5<br>Shell: can override | Experiment tuning parameter |
+| `worker.rollout.n` | YAML only (8) | Stable, no need to override |
+| `worker.rollout.gpu_memory_utilization` | YAML only (0.55) | Stable, no need to override |
 
-**⚠️ IMPORTANT**: Always check `run_brain_tumor_3d_4x80G.sh` for the actual values being used!
+**Key Improvement**: YAML and Shell are now **mostly consistent**. Shell overrides are minimal and intentional.
 
 ---
 
