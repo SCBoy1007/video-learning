@@ -55,8 +55,7 @@ class CustomRewardManager:
                 'format': [],
                 'iou': [],
                 'peak_slice': [],
-                'tumor_ratio': [],
-                'non_repeat': []
+                'tumor_ratio': []
             }
 
         for i in range(len(data)):
@@ -108,8 +107,8 @@ class CustomRewardManager:
                     except:
                         # Fallback to default if import fails
                         weights = {
-                            'thinking_format': 0.5, 'video_keyword': 0.5, 'format': 1.0, 'iou': 3.0,
-                            'peak_slice': 1.5, 'tumor_ratio': 1.5, 'non_repeat': 0.5
+                            'thinking_format': 0.3, 'video_keyword': 0.2, 'format': 0.5, 'iou': 5.0,
+                            'peak_slice': 2.0, 'tumor_ratio': 2.0
                         }
 
                     print(f"  └─ thinking_format: {details['thinking_format']:.2f}/{weights['thinking_format']:.1f} | "
@@ -117,8 +116,7 @@ class CustomRewardManager:
                           f"format: {details['format']:.2f}/{weights['format']:.1f} | "
                           f"iou: {details['iou']:.2f}/{weights['iou']:.1f}")
                     print(f"  └─ peak_slice: {details['peak_slice']:.2f}/{weights['peak_slice']:.1f} | "
-                          f"tumor_ratio: {details['tumor_ratio']:.2f}/{weights['tumor_ratio']:.1f} | "
-                          f"non_repeat: {details['non_repeat']:.2f}/{weights['non_repeat']:.1f}")
+                          f"tumor_ratio: {details['tumor_ratio']:.2f}/{weights['tumor_ratio']:.1f}")
             else:
                 # Print only score for remaining samples
                 print(f"[score {i+1}] {score:.3f}")
