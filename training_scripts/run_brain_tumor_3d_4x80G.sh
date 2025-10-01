@@ -20,9 +20,15 @@ MODEL_PATH=pretrained_models/Qwen2.5-VL-7B-Instruct  # Use local model path to a
 
 RUN_NAME=$(basename "$0" .sh)
 
-# Use two datasets for training, reserve Additional_video for validation
-TRAIN_DATA="data/BraTS_GLI_TrainingData_video/train,data/MSD_T1_MRI_video/train"
-VAL_DATA="data/BraTS_GLI_TrainingData_Additional_video/train"
+# 仅使用成像质量最好的两个模态
+TRAIN_DATA="data/BraTS2024-BraTS-GLI-T1C/train,\
+data/BraTS2024-BraTS-GLI-T2F/train,\
+data/MSD-Task01-BrainTumour-T1Gd/train,\
+data/MSD-Task01-BrainTumour-FLAIR/train"
+
+# 验证集同样只用 BraTS 的 T1C/T2F
+VAL_DATA="data/BraTS2024-BraTS-GLI-Additional-T1C/train,\
+data/BraTS2024-BraTS-GLI-Additional-T2F/train"
 
 python3 -m verl.trainer.main \
     config=training_scripts/brain_tumor_3d_4x80G.yaml \
