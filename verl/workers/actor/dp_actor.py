@@ -179,18 +179,31 @@ class DataParallelPPOActor(BasePPOActor):
                 old_log_prob = model_inputs["old_log_probs"]
                 advantages = model_inputs["advantages"]
 
-                # Normalize advantages to reduce gradient variance
-                # This is critical when advantage range is large (e.g., max=2.3, min=-1.7)
-                advantages_mean = advantages.mean()
-                advantages_std = advantages.std()
-                advantages_normalized = (advantages - advantages_mean) / (advantages_std + 1e-8)
+                # Normalize advantages using masked statistics (ignore padding)
+                # GRPO already does group-level normalization, but groups may have different scales
+                # This batch-level normalization stabilizes training across groups
+
+                # Compute masked mean and std (only valid tokens, ignore padding)
+                advantages_mean = verl_F.masked_mean(advantages, response_mask)
+                advantages_var = verl_F.masked_mean((advantages - advantages_mean) ** 2, response_mask)
+                advantages_std = torch.sqrt(advantages_var + 1e-8)
+
+                # Normalize only if std is significant (avoid over-compression)
+                # If GRPO already normalized well (std < 0.5), skip batch normalization
+                if advantages_std > 0.5:
+                    advantages_normalized = (advantages - advantages_mean) / (advantages_std + 1e-8)
+                else:
+                    advantages_normalized = advantages  # Use GRPO result directly
 
                 # Log normalization stats for monitoring
                 if mb_idx == 0 and i == 0:  # Only first micro-batch of first mini-batch
                     metrics["debug/advantages_mean"] = advantages_mean.item()
                     metrics["debug/advantages_std"] = advantages_std.item()
                     metrics["debug/advantages_max_before"] = advantages.max().item()
+                    metrics["debug/advantages_min_before"] = advantages.min().item()
                     metrics["debug/advantages_max_after"] = advantages_normalized.max().item()
+                    metrics["debug/advantages_min_after"] = advantages_normalized.min().item()
+                    metrics["debug/batch_normalized"] = 1.0 if advantages_std > 0.5 else 0.0
 
                 clip_ratio = self.config.clip_ratio
                 entropy_coeff = self.config.entropy_coeff
