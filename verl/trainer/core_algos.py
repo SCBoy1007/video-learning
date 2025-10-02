@@ -291,6 +291,20 @@ def compute_policy_loss(
     true_kl = ratio - 1 - negative_approx_kl
     ppo_kl_true = verl_F.masked_mean(true_kl, eos_mask)
 
+    # Debug: print KL statistics (remove this after debugging)
+    import sys
+    if hasattr(sys, '_kl_debug_counter'):
+        sys._kl_debug_counter += 1
+    else:
+        sys._kl_debug_counter = 1
+
+    if sys._kl_debug_counter <= 5:  # Only first 5 batches
+        print(f"\n[DEBUG KL batch {sys._kl_debug_counter}]")
+        print(f"  negative_approx_kl: min={negative_approx_kl.min().item():.6f}, max={negative_approx_kl.max().item():.6f}, mean={negative_approx_kl.mean().item():.6f}")
+        print(f"  ratio: min={ratio.min().item():.6f}, max={ratio.max().item():.6f}, mean={ratio.mean().item():.6f}")
+        print(f"  ppo_kl_approx: {ppo_kl_approx.item():.8f}")
+        print(f"  ppo_kl_true: {ppo_kl_true.item():.8f}")
+
     pg_losses = -advantages * ratio
     pg_losses2 = -advantages * torch.clamp(ratio, 1.0 - cliprange, 1.0 + cliprange)
 
