@@ -49,4 +49,4 @@ python3 -m verl.trainer.main \
     `# Experiment tuning params (aligned with Seg-Zero baseline)` \
     worker.actor.kl_loss_coef=5.0e-3 \
     worker.actor.optim.lr=1.0e-6 \
-    worker.actor.max_grad_norm=50.0
+    worker.actor.max_grad_norm=200.0
