@@ -168,8 +168,8 @@ class RLHFDataset(Dataset):
                 "3. Measurement reasoning: Explain how you estimate boundaries, peak slice, and volume\n" \
                 "Provide concrete observations from the video, not generic descriptions.\n" \
                 "\n" \
-                "Output format: <answer>[{{\"bbox_3d\": [x_min, y_min, z_min, x_max, y_max, z_max], \"peak_slice\": <int>, \"tumor_ratio\": <float>}}]</answer>\n" \
-                "Note: (x,y) are spatial coordinates and z is the slice index."
+                "Output format: <answer>[{{\"bbox_2d\": [x_min, y_min, x_max, y_max], \"peak_slice\": <int>, \"start_slice\": <int>, \"end_slice\": <int>, \"tumor_ratio\": <float>}}]</answer>\n" \
+                "Note: bbox_2d is the 2D bounding box on the peak_slice frame. start_slice and end_slice define the slice range where tumor appears."
         else:
             # Original image prompt
             self.user_prompt = "<image>\n" \

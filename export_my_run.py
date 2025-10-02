@@ -8,7 +8,7 @@ import pandas as pd
 # Your run information
 ENTITY = "shichang855-the-university-of-hong-kong"
 PROJECT = "brain_tumor_3d_4x80G"
-RUN_ID = "yi6cm3g7"  # Update this to your current run ID
+RUN_ID = "ghggw0pw"  # Update this to your current run ID
 API_KEY = "79a1c2f2011c05dda9220a3e1dede19ef639f073"
 
 def export_run():
