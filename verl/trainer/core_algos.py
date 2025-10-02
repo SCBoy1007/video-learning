@@ -270,20 +270,25 @@ def compute_policy_loss(
     negative_approx_kl = log_prob - old_log_prob
     ratio = torch.exp(negative_approx_kl)
 
-    # Approximate KL (fast but can be negative)
+    # Approximate KL (first-order, fast but can be negative)
+    # KL(π_old || π_new) ≈ E[old_log_prob - log_prob] = E[-negative_approx_kl]
     ppo_kl_approx = verl_F.masked_mean(-negative_approx_kl, eos_mask)
 
-    # True KL divergence (mathematically correct, always >= 0 in theory)
-    # KL(p_old || p_new) = E[log(p_old/p_new) - (p_old/p_new - 1)]
+    # True KL divergence (second-order Taylor expansion, always >= 0)
+    # Using the exact expansion: KL = E[ratio - 1 - log(ratio)]
     # Where:
-    #   - negative_approx_kl = log(p_new/p_old)
-    #   - ratio = exp(negative_approx_kl) = p_new/p_old
-    #   - p_old/p_new = 1/ratio
+    #   - negative_approx_kl = log_prob - old_log_prob = log(π_new/π_old)
+    #   - ratio = exp(negative_approx_kl) = π_new/π_old
     # Therefore:
-    #   KL = E[-log(p_new/p_old) - (1/ratio - 1)]
-    #      = E[-negative_approx_kl - (1/ratio - 1)]
-    #      = E[-negative_approx_kl + 1 - 1/ratio]
-    true_kl = -negative_approx_kl + 1 - 1/ratio
+    #   KL(π_old || π_new) = E[π_old/π_new - 1 - log(π_old/π_new)]
+    #                      = E[1/ratio - 1 - (-negative_approx_kl)]
+    #                      = E[1/ratio - 1 + negative_approx_kl]
+    #
+    # But this still has numerical issues. The standard stable form is:
+    #   KL = E[ratio - 1 - negative_approx_kl]  when ratio = π_new/π_old
+    # This is the reverse KL: KL(π_new || π_old) which is what PPO actually uses
+    # Taylor expansion: exp(x) - 1 - x ≈ x²/2 ≥ 0 (always non-negative)
+    true_kl = ratio - 1 - negative_approx_kl
     ppo_kl_true = verl_F.masked_mean(true_kl, eos_mask)
 
     pg_losses = -advantages * ratio
