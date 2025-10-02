@@ -198,6 +198,10 @@ class DataParallelPPOActor(BasePPOActor):
                 # compute policy loss
                 policy_loss = pg_loss - entropy_loss * entropy_coeff
 
+                # Track loss component magnitudes for gradient diagnosis
+                pg_component = pg_loss.detach().item()
+                entropy_component = (entropy_loss * entropy_coeff).detach().item()
+
                 if self.config.use_kl_loss:
                     ref_log_prob = model_inputs["ref_log_prob"]
                     # compute kl loss
@@ -207,9 +211,18 @@ class DataParallelPPOActor(BasePPOActor):
                         kl_penalty=self.config.kl_loss_type,
                     )
                     kl_loss = masked_mean(kld, response_mask)
+                    kl_component = (kl_loss * self.config.kl_loss_coef).detach().item()
                     policy_loss = policy_loss + kl_loss * self.config.kl_loss_coef
                     metrics["actor/kl_loss"] = kl_loss.detach().item()
                     metrics["actor/kl_coef"] = self.config.kl_loss_coef
+                else:
+                    kl_component = 0.0
+
+                # Record weighted loss components for gradient diagnosis
+                metrics["debug/pg_component"] = pg_component
+                metrics["debug/entropy_component"] = entropy_component
+                metrics["debug/kl_component"] = kl_component
+                metrics["debug/total_policy_loss"] = policy_loss.detach().item()
 
                 loss = policy_loss / gradient_accumulation
 

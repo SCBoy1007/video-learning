@@ -32,6 +32,9 @@ def concat_dict_to_str(dict: Dict, step):
         'actor/ppo_kl_approx', 'actor/ppo_kl_true', 'actor/grad_norm', 'actor/lr',
         'critic/score/mean', 'critic/rewards/mean', 'critic/advantages/mean'
     }
+    # Debug metrics for gradient diagnosis (temporary, remove after diagnosis)
+    debug_metrics = [k for k in dict.keys() if k.startswith('debug/')]
+    core_metrics.update(debug_metrics)
     # Reward breakdown (important for diagnosing reward hacking)
     reward_metrics = [k for k in dict.keys() if k.startswith('reward/')]
     core_metrics.update(reward_metrics)
