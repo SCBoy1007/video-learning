@@ -49,4 +49,4 @@ python3 -m verl.trainer.main \
     `# Experiment tuning params (override here for quick experiments)` \
     worker.actor.kl_loss_coef=8.0e-2 \
     worker.actor.optim.lr=1.0e-5 \
-    worker.actor.max_grad_norm=10.0
+    worker.actor.max_grad_norm=100.0
