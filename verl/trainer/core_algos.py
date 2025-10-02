@@ -274,11 +274,16 @@ def compute_policy_loss(
     ppo_kl_approx = verl_F.masked_mean(-negative_approx_kl, eos_mask)
 
     # True KL divergence (mathematically correct, always >= 0 in theory)
-    # KL = E[log(p_old/p_new) - (p_old/p_new - 1)]
-    #    = E[-log(p_new/p_old) - (exp(log(p_old/p_new)) - 1)]
-    #    = E[-negative_approx_kl - (1/ratio - 1)]
-    #    = E[-negative_approx_kl - (ratio - 1)]  # Fixed: should be (ratio - 1) not (1/ratio - 1)
-    true_kl = -negative_approx_kl - (ratio - 1)
+    # KL(p_old || p_new) = E[log(p_old/p_new) - (p_old/p_new - 1)]
+    # Where:
+    #   - negative_approx_kl = log(p_new/p_old)
+    #   - ratio = exp(negative_approx_kl) = p_new/p_old
+    #   - p_old/p_new = 1/ratio
+    # Therefore:
+    #   KL = E[-log(p_new/p_old) - (1/ratio - 1)]
+    #      = E[-negative_approx_kl - (1/ratio - 1)]
+    #      = E[-negative_approx_kl + 1 - 1/ratio]
+    true_kl = -negative_approx_kl + 1 - 1/ratio
     ppo_kl_true = verl_F.masked_mean(true_kl, eos_mask)
 
     pg_losses = -advantages * ratio
