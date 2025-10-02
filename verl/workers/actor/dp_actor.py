@@ -179,6 +179,19 @@ class DataParallelPPOActor(BasePPOActor):
                 old_log_prob = model_inputs["old_log_probs"]
                 advantages = model_inputs["advantages"]
 
+                # Normalize advantages to reduce gradient variance
+                # This is critical when advantage range is large (e.g., max=2.3, min=-1.7)
+                advantages_mean = advantages.mean()
+                advantages_std = advantages.std()
+                advantages_normalized = (advantages - advantages_mean) / (advantages_std + 1e-8)
+
+                # Log normalization stats for monitoring
+                if mb_idx == 0 and i == 0:  # Only first micro-batch of first mini-batch
+                    metrics["debug/advantages_mean"] = advantages_mean.item()
+                    metrics["debug/advantages_std"] = advantages_std.item()
+                    metrics["debug/advantages_max_before"] = advantages.max().item()
+                    metrics["debug/advantages_max_after"] = advantages_normalized.max().item()
+
                 clip_ratio = self.config.clip_ratio
                 entropy_coeff = self.config.entropy_coeff
 
@@ -188,7 +201,7 @@ class DataParallelPPOActor(BasePPOActor):
                 pg_loss, pg_clipfrac, ppo_kl_approx, ppo_kl_true = core_algos.compute_policy_loss(
                     old_log_prob=old_log_prob,
                     log_prob=log_prob,
-                    advantages=advantages,
+                    advantages=advantages_normalized,  # Use normalized advantages
                     eos_mask=response_mask,
                     cliprange=clip_ratio,
                 )
