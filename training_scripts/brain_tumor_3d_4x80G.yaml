@@ -19,15 +19,15 @@ worker:
     global_batch_size: 16  # Increased to 16 to align with Seg-Zero
     micro_batch_size_per_device_for_update: 2  # Updated to match shell script
     micro_batch_size_per_device_for_experience: 2  # Updated to match shell script
-    max_grad_norm: 100.0  # Increased to 100 - grad_norm ~3800, need much higher threshold
+    max_grad_norm: 5.0  # Aligned with Seg-Zero conservative value (was 100.0)
     use_kl_loss: true
-    kl_loss_coef: 8.0e-2  # Restored to verified stable configuration (Oct 1)
+    kl_loss_coef: 5.0e-3  # Aligned with Seg-Zero (was 8e-2, 16x reduction)
     kl_loss_type: low_var_kl
     model:
       model_path: Qwen/Qwen2.5-VL-7B-Instruct  # ⚠️ Overridden by .sh to use local cache
       enable_gradient_checkpointing: true
     optim:
-      lr: 1.0e-5  # Restored to verified stable configuration (Oct 1)
+      lr: 1.0e-6  # Aligned with Seg-Zero (was 1e-5, 10x reduction)
       weight_decay: 1.0e-2
       lr_warmup_steps_ratio: 0.0  # No warmup
       training_steps: 1725  # ~115 batches × 15 episodes (batch_size=16)

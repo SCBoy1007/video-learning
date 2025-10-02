@@ -291,14 +291,17 @@ def compute_policy_loss(
     true_kl = ratio - 1 - negative_approx_kl
     ppo_kl_true = verl_F.masked_mean(true_kl, eos_mask)
 
-    # Debug: always print if KL is suspiciously 0 (remove this after debugging)
+    # Debug: Print KL=0 warning only for first 3 occurrences to reduce noise
+    # This is expected behavior for GRPO single-epoch training
     if ppo_kl_approx.abs() < 1e-6 and ppo_kl_true.abs() < 1e-6:
-        print(f"\n[WARNING] Both KL metrics are ~0!")
-        print(f"  log_prob stats: min={log_prob.min().item():.6f}, max={log_prob.max().item():.6f}, mean={log_prob.mean().item():.6f}")
-        print(f"  old_log_prob stats: min={old_log_prob.min().item():.6f}, max={old_log_prob.max().item():.6f}, mean={old_log_prob.mean().item():.6f}")
-        print(f"  negative_approx_kl stats: min={negative_approx_kl.min().item():.8f}, max={negative_approx_kl.max().item():.8f}, mean={negative_approx_kl.mean().item():.8f}")
-        print(f"  Are they the same tensor? {log_prob is old_log_prob}")
-        print(f"  log_prob requires_grad: {log_prob.requires_grad}, old_log_prob requires_grad: {old_log_prob.requires_grad}")
+        if not hasattr(compute_policy_loss, '_kl_zero_count'):
+            compute_policy_loss._kl_zero_count = 0
+        if compute_policy_loss._kl_zero_count < 3:
+            compute_policy_loss._kl_zero_count += 1
+            print(f"\n[KL=0 INFO] Both KL metrics are ~0 (occurrence {compute_policy_loss._kl_zero_count}/3)")
+            print(f"  This is expected for GRPO single-epoch: log_prob computed with same params as old_log_prob")
+            print(f"  log_prob: min={log_prob.min().item():.6f}, mean={log_prob.mean().item():.6f}")
+            print(f"  old_log_prob: min={old_log_prob.min().item():.6f}, mean={old_log_prob.mean().item():.6f}")
 
     pg_losses = -advantages * ratio
     pg_losses2 = -advantages * torch.clamp(ratio, 1.0 - cliprange, 1.0 + cliprange)
