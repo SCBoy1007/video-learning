@@ -4,7 +4,7 @@ This repository is a **research fork** of [Seg-Zero](https://github.com/dvlab-re
 
 ## Project Overview
 
-**Video-Learning** applies the GRPO (Group Relative Policy Optimization) algorithm to train Qwen2.5-VL models for 3D medical imaging tasks. Instead of segmentation masks, the model predicts structured outputs including 3D bounding boxes, peak slices, and tumor volume ratios.
+**Video-Learning** applies the GRPO (Group Relative Policy Optimization) algorithm to train Qwen2.5-VL models for 3D medical imaging tasks. Instead of segmentation masks, the model predicts structured outputs including 2D bounding boxes on peak slices, slice range (start/end), and tumor volume ratios.
 
 ### Key Adaptations from Seg-Zero:
 
