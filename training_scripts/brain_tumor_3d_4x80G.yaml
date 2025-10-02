@@ -3,7 +3,7 @@ data:
   val_files: None    # ⚠️ OVERRIDDEN by run_brain_tumor_3d_4x80G.sh
   prompt_key: problem
   max_prompt_length: 28000  # Increased to accommodate video tokens (155 frames × ~130 tokens/frame ≈ 20k + text)
-  max_response_length: 2000  # Restored to original value to accommodate detailed thinking without truncation
+  max_response_length: 1200  # Balanced: detailed thinking (300+ words) without OOM
   rollout_batch_size: 16  # Aligned with Seg-Zero configuration
   shuffle: true
   seed: 42
