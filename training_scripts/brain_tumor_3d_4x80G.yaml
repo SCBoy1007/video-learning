@@ -19,7 +19,7 @@ worker:
     global_batch_size: 16  # Increased to 16 to align with Seg-Zero
     micro_batch_size_per_device_for_update: 2  # Updated to match shell script
     micro_batch_size_per_device_for_experience: 2  # Updated to match shell script
-    max_grad_norm: 5.0  # Aligned with Seg-Zero conservative value (was 100.0)
+    max_grad_norm: 50.0  # Loosen clipping for high-variance 3D task (was 5.0)
     use_kl_loss: true
     kl_loss_coef: 5.0e-3  # Aligned with Seg-Zero (was 8e-2, 16x reduction)
     kl_loss_type: low_var_kl
