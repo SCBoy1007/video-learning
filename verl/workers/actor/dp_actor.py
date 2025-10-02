@@ -98,7 +98,51 @@ class DataParallelPPOActor(BasePPOActor):
         else:
             grad_norm = nn.utils.clip_grad_norm_(self.actor_module.parameters(), max_norm=self.config.max_grad_norm)
 
+        # DEBUG: Check if parameters will actually update
+        if self.rank == 0 and not hasattr(self, '_debug_param_check_done'):
+            # Sample one parameter to track across steps
+            for name, param in self.actor_module.named_parameters():
+                if param.requires_grad and param.grad is not None:
+                    self._debug_param_name = name
+                    self._debug_param_before = param.data.clone()
+                    print(f"\n[PARAM TRACKING] Will track parameter: {name}")
+                    print(f"  Shape: {param.shape}, dtype: {param.dtype}")
+                    print(f"  Value sample (first 3 elements): {param.data.flatten()[:3]}")
+                    print(f"  Grad sample (first 3 elements): {param.grad.flatten()[:3]}")
+                    print(f"  Grad norm for this param: {param.grad.norm().item():.6f}")
+
+                    # Check optimizer state
+                    param_state = self.actor_optimizer.state.get(param, {})
+                    if param_state:
+                        print(f"  Optimizer state keys: {param_state.keys()}")
+                        if 'step' in param_state:
+                            print(f"  Optimizer step count: {param_state['step']}")
+                    else:
+                        print(f"  ⚠️  WARNING: No optimizer state for this parameter!")
+
+                    self._debug_param_check_done = True
+                    break
+
         self.actor_optimizer.step()
+
+        # DEBUG: Check if parameter actually changed after optimizer.step()
+        if self.rank == 0 and hasattr(self, '_debug_param_before'):
+            for name, param in self.actor_module.named_parameters():
+                if name == self._debug_param_name:
+                    diff = (param.data - self._debug_param_before).abs().max().item()
+                    print(f"\n[PARAM UPDATE CHECK]")
+                    print(f"  Parameter: {name}")
+                    print(f"  Max absolute change: {diff:.15e}")
+                    print(f"  Value after update (first 3): {param.data.flatten()[:3]}")
+                    if diff == 0.0:
+                        print(f"  ⚠️  WARNING: Parameter did not change at all!")
+                    elif diff < 1e-7:
+                        print(f"  ⚠️  WARNING: Parameter change is extremely small (< 1e-7)")
+                    else:
+                        print(f"  ✓ Parameter updated successfully")
+                    self._debug_param_before = param.data.clone()
+                    break
+
         return grad_norm
 
     @torch.no_grad()
@@ -144,6 +188,35 @@ class DataParallelPPOActor(BasePPOActor):
 
     def update_policy(self, data: DataProto) -> Dict[str, Any]:
         self.actor_module.train()
+
+        # DEBUG: Track old_log_probs across steps to verify policy is changing
+        if self.rank == 0:
+            current_old_log_probs = data.batch["old_log_probs"]
+            if not hasattr(self, '_prev_old_log_probs'):
+                # First step
+                self._prev_old_log_probs = current_old_log_probs.clone()
+                self._step_counter = 1
+                print(f"\n[CROSS-STEP TRACKING] Step {self._step_counter}")
+                print(f"  old_log_probs stats: min={current_old_log_probs.min():.6f}, max={current_old_log_probs.max():.6f}, mean={current_old_log_probs.mean():.6f}")
+            else:
+                # Compare with previous step
+                self._step_counter += 1
+                diff = (current_old_log_probs - self._prev_old_log_probs).abs()
+                print(f"\n[CROSS-STEP TRACKING] Step {self._step_counter}")
+                print(f"  old_log_probs stats: min={current_old_log_probs.min():.6f}, max={current_old_log_probs.max():.6f}, mean={current_old_log_probs.mean():.6f}")
+                print(f"  Difference from previous step:")
+                print(f"    min_diff={diff.min():.6f}, max_diff={diff.max():.6f}, mean_diff={diff.mean():.6f}")
+
+                # Check if old_log_probs are completely different (new rollout) or similar (same data)
+                same_data_pct = (diff < 0.001).float().mean().item() * 100
+                print(f"    Percentage of values unchanged (diff < 0.001): {same_data_pct:.1f}%")
+
+                if same_data_pct > 50:
+                    print(f"  ⚠️  WARNING: >50% of old_log_probs are the same - using same rollout data?")
+                else:
+                    print(f"  ✓ Old_log_probs changed significantly - new rollout or policy updated")
+
+                self._prev_old_log_probs = current_old_log_probs.clone()
 
         temperature = data.meta_info["temperature"]  # temperature must be in the data.meta_info to avoid slient error
         select_keys = ["responses", "input_ids", "attention_mask", "position_ids", "old_log_probs", "advantages"]
