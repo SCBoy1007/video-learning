@@ -269,14 +269,24 @@ def compute_policy_loss(
     """
     negative_approx_kl = log_prob - old_log_prob
     ratio = torch.exp(negative_approx_kl)
-    ppo_kl = verl_F.masked_mean(-negative_approx_kl, eos_mask)
+
+    # Approximate KL (fast but can be negative)
+    ppo_kl_approx = verl_F.masked_mean(-negative_approx_kl, eos_mask)
+
+    # True KL divergence (mathematically correct, always >= 0 in theory)
+    # KL = E[log(p_old/p_new) - (p_old/p_new - 1)]
+    #    = E[-log(p_new/p_old) - (exp(log(p_old/p_new)) - 1)]
+    #    = E[-negative_approx_kl - (1/ratio - 1)]
+    #    = E[-negative_approx_kl - (ratio - 1)]  # Fixed: should be (ratio - 1) not (1/ratio - 1)
+    true_kl = -negative_approx_kl - (ratio - 1)
+    ppo_kl_true = verl_F.masked_mean(true_kl, eos_mask)
 
     pg_losses = -advantages * ratio
     pg_losses2 = -advantages * torch.clamp(ratio, 1.0 - cliprange, 1.0 + cliprange)
 
     pg_loss = verl_F.masked_mean(torch.max(pg_losses, pg_losses2), eos_mask)
     pg_clipfrac = verl_F.masked_mean(torch.gt(pg_losses2, pg_losses).float(), eos_mask)
-    return pg_loss, pg_clipfrac, ppo_kl
+    return pg_loss, pg_clipfrac, ppo_kl_approx, ppo_kl_true
 
 
 def compute_entropy_loss(logits, eos_mask):
