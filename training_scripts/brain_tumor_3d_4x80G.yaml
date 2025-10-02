@@ -21,13 +21,13 @@ worker:
     micro_batch_size_per_device_for_experience: 2  # Updated to match shell script
     max_grad_norm: 1.0
     use_kl_loss: true
-    kl_loss_coef: 8.0e-2  # ⚠️ Tuning parameter - can be overridden in .sh for experiments
+    kl_loss_coef: 5.0e-3  # Aligned with Seg-Zero (more conservative KL constraint)
     kl_loss_type: low_var_kl
     model:
       model_path: Qwen/Qwen2.5-VL-7B-Instruct  # ⚠️ Overridden by .sh to use local cache
       enable_gradient_checkpointing: true
     optim:
-      lr: 1.0e-5  # ⚠️ Tuning parameter - can be overridden in .sh for experiments
+      lr: 1.0e-6  # Aligned with Seg-Zero (10x lower for stability)
       weight_decay: 1.0e-2
       lr_warmup_steps_ratio: 0.0  # No warmup
       training_steps: 1725  # ~115 batches × 15 episodes (batch_size=16)
