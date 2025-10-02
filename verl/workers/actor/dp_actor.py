@@ -181,29 +181,36 @@ class DataParallelPPOActor(BasePPOActor):
 
                 # Normalize advantages using masked statistics (ignore padding)
                 # GRPO already does group-level normalization, but groups may have different scales
-                # This batch-level normalization stabilizes training across groups
+                # This batch-level normalization stabilizes training when group variance is high
 
                 # Compute masked mean and std (only valid tokens, ignore padding)
                 advantages_mean = verl_F.masked_mean(advantages, response_mask)
                 advantages_var = verl_F.masked_mean((advantages - advantages_mean) ** 2, response_mask)
                 advantages_std = torch.sqrt(advantages_var + 1e-8)
 
-                # Normalize only if std is significant (avoid over-compression)
-                # If GRPO already normalized well (std < 0.5), skip batch normalization
-                if advantages_std > 0.5:
-                    advantages_normalized = (advantages - advantages_mean) / (advantages_std + 1e-8)
-                else:
-                    advantages_normalized = advantages  # Use GRPO result directly
+                # Check if batch normalization is needed using percentile-based criterion
+                # GRPO normalizes to std≈1, so we check if extreme values exceed reasonable range
+                valid_advantages = advantages[response_mask.bool()]
+                adv_p95 = torch.quantile(valid_advantages.abs(), 0.95) if valid_advantages.numel() > 0 else torch.tensor(0.0)
 
-                # Log normalization stats for monitoring
-                if mb_idx == 0 and i == 0:  # Only first micro-batch of first mini-batch
-                    metrics["debug/advantages_mean"] = advantages_mean.item()
-                    metrics["debug/advantages_std"] = advantages_std.item()
-                    metrics["debug/advantages_max_before"] = advantages.max().item()
-                    metrics["debug/advantages_min_before"] = advantages.min().item()
-                    metrics["debug/advantages_max_after"] = advantages_normalized.max().item()
-                    metrics["debug/advantages_min_after"] = advantages_normalized.min().item()
-                    metrics["debug/batch_normalized"] = 1.0 if advantages_std > 0.5 else 0.0
+                # Apply batch normalization only if 95th percentile > 1.5 (indicates high variance)
+                if adv_p95 > 1.5:
+                    # Normalize and re-apply mask to ensure padding remains 0
+                    advantages_normalized = ((advantages - advantages_mean) / (advantages_std + 1e-8)) * response_mask
+                    batch_normalized = True
+                else:
+                    advantages_normalized = advantages  # GRPO normalization sufficient
+                    batch_normalized = False
+
+                # Log normalization stats (aggregate across micro-batches)
+                append_to_dict(metrics, {
+                    "debug/advantages_mean": advantages_mean.item(),
+                    "debug/advantages_std": advantages_std.item(),
+                    "debug/advantages_p95": adv_p95.item(),
+                    "debug/advantages_max_before": valid_advantages.max().item() if valid_advantages.numel() > 0 else 0.0,
+                    "debug/advantages_min_before": valid_advantages.min().item() if valid_advantages.numel() > 0 else 0.0,
+                    "debug/batch_normalized": 1.0 if batch_normalized else 0.0,
+                })
 
                 clip_ratio = self.config.clip_ratio
                 entropy_coeff = self.config.entropy_coeff
