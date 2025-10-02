@@ -319,12 +319,12 @@ def brain_tumor_3d_non_repeat_reward(predict_str: str) -> float:
 
 # Reward weights configuration (centralized for easy tuning)
 REWARD_WEIGHTS = {
-    'thinking_format': 0.5,  # 提高到0.5（确保有质量的推理过程）
-    'video_keyword': 0.5,    # 提高到0.5（视频分析的必要前提，作为门槛）
-    'format': 0.5,           # 保持不变
-    'iou': 5.0,              # 保持不变，核心任务
-    'peak_slice': 2.0,       # 保持不变
-    'tumor_ratio': 2.0,      # 保持不变
+    'thinking_format': 0.5,  # 推理格式质量
+    'video_keyword': 0.5,    # 视频分析门槛
+    'format': 0.5,           # JSON格式验证
+    'iou': 1.0,              # 3D边界框IoU（降低权重以稳定训练）
+    'peak_slice': 1.0,       # 峰值切片准确性（降低权重以稳定训练）
+    'tumor_ratio': 1.0,      # 肿瘤比例准确性（降低权重以稳定训练）
     # non_repeat removed - should be handled during sampling, not as reward
 }
 
@@ -336,15 +336,15 @@ def get_reward_weights():
 
 def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_details: bool = False):
     """
-    3D脑肿瘤检测总奖励函数 (最高10.5分)
+    3D脑肿瘤检测总奖励函数 (最高4.5分)
 
-    组成（加强版权重 + 门槛机制）：
+    组成（平衡权重 + 门槛机制）：
     - 思维格式奖励: 0.5分 (必须有50+字符且非JSON的推理内容)
     - 视频关键词奖励: 0.5分 (必须以"This video shows"开头，作为医学测量的门槛)
     - 格式奖励: 0.5分 (JSON格式验证)
-    - 3D IoU奖励: 5.0分 (核心任务)
-    - 峰值切片奖励: 2.0分 (医学指标)
-    - 肿瘤比例奖励: 2.0分 (医学指标)
+    - 3D IoU奖励: 1.0分 (核心任务，权重已降低以稳定训练)
+    - 峰值切片奖励: 1.0分 (医学指标，权重已降低以稳定训练)
+    - 肿瘤比例奖励: 1.0分 (医学指标，权重已降低以稳定训练)
 
     **门槛机制**：
     如果 video_keyword = 0（未写"This video shows"），则 IoU、peak_slice、tumor_ratio 全部置0。
@@ -493,7 +493,7 @@ if __name__ == "__main__":
     ground_truth = """[{"bbox_3d": [91, 33, 102, 131, 84, 150], "peak_slice": 124, "tumor_ratio": 0.021957}]"""
 
     score, details = brain_tumor_3d_compute_score(predict_str, ground_truth, return_details=True)
-    print(f"Total score: {score}/10.0")
+    print(f"Total score: {score}/4.5")
 
     # 测试各个组件
     print(f"\nDetailed breakdown:")

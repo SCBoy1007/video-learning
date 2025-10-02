@@ -74,12 +74,12 @@ worker.actor.optim.lr=1.0e-5         # 3e-5 → 1e-5
 
 ```python
 REWARD_WEIGHTS = {
-    'thinking_format': 0.3,
-    'video_keyword': 0.2,
+    'thinking_format': 0.5,
+    'video_keyword': 0.5,
     'format': 0.5,
-    'iou': 5.0,           # Core task
-    'peak_slice': 2.0,
-    'tumor_ratio': 2.0,
+    'iou': 1.0,           # Core task (reduced to stabilize training)
+    'peak_slice': 1.0,    # Reduced to stabilize training
+    'tumor_ratio': 1.0,   # Reduced to stabilize training
 }
 ```
 
@@ -174,20 +174,21 @@ REWARD_WEIGHTS = {'iou': 10.0}
 ```yaml
 # Actual values used (after all overrides)
 algorithm.kl_coef: 0.0
-worker.actor.kl_loss_coef: 0.08
-worker.actor.optim.lr: 1e-5
+worker.actor.kl_loss_coef: 5.0e-3
+worker.actor.optim.lr: 1.0e-6
+worker.actor.max_grad_norm: 200.0
 worker.actor.micro_batch_size: 2
 worker.rollout.n: 8
 worker.rollout.enable_chunked_prefill: false
 
 # Reward weights (from brain_tumor_3d.py)
-thinking_format: 0.3
-video_keyword: 0.2
+thinking_format: 0.5
+video_keyword: 0.5
 format: 0.5
-iou: 5.0
-peak_slice: 2.0
-tumor_ratio: 2.0
-# Total: 10.0 points
+iou: 1.0
+peak_slice: 1.0
+tumor_ratio: 1.0
+# Total: 4.5 points
 ```
 
 ---
@@ -219,4 +220,4 @@ tumor_ratio: 2.0
 
 ---
 
-**Last Updated**: 2025-10-01 (after KL/LR adjustments)
+**Last Updated**: 2025-10-02 (after reward weight rebalancing to stabilize training)

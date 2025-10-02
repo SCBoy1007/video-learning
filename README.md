@@ -83,26 +83,27 @@ Logs are automatically sent to **Weights & Biases** (project: `brain_tumor_3d_4x
 
 ## Reward Function
 
-The custom reward function evaluates predictions across multiple dimensions (max score: 8.5):
+The custom reward function evaluates predictions across multiple dimensions (max score: 4.5):
 
-1. **Thinking Format Reward** (0.5): Strict `<think>...</think><answer>...</answer>` format (aligned with Seg-Zero)
+1. **Thinking Format Reward** (0.5): Strict `<think>...</think><answer>...</answer>` format with meaningful content (≥50 chars)
 2. **Video Keyword Reward** (0.5): Thinking must start with "This video shows" to reinforce video awareness
-3. **Format Reward** (1.0): Valid JSON structure with required fields
-4. **3D IoU Reward** (3.0): Bounding box overlap (doubled weight for core task)
-   - IoU > 0.7: 3.0 points
-   - IoU > 0.5: 2.0 points
-   - IoU > 0.3: 1.0 points
-5. **Peak Slice Reward** (1.5): Accuracy of peak tumor slice (increased weight)
-   - Error ≤3: 1.5 points
-   - Error ≤5: 1.05 points
-   - Error ≤10: 0.45 points
-6. **Tumor Ratio Reward** (1.5): Volume estimation accuracy (increased weight)
-   - Error ≤10%: 1.5 points
-   - Error ≤20%: 1.05 points
-   - Error ≤30%: 0.45 points
-7. **Non-repetition Reward** (0.5): Output quality check
+3. **Format Reward** (0.5): Valid JSON structure with required fields (`bbox_3d`, `peak_slice`, `tumor_ratio`)
+4. **3D IoU Reward** (1.0): Bounding box overlap accuracy (core task)
+   - IoU ≥ 0.7: 1.0 point (full score)
+   - IoU ≥ 0.3: 0.51 point (partial overlap)
+   - Valid box: 0.1 point (baseline)
+5. **Peak Slice Reward** (1.0): Accuracy of peak tumor slice identification
+   - Error ≤ 3 slices: 1.0 point
+   - Error ≤ 5 slices: 0.7 point
+   - Error ≤ 10 slices: 0.3 point
+6. **Tumor Ratio Reward** (1.0): Volume estimation accuracy
+   - Relative error ≤ 10%: 1.0 point
+   - Relative error ≤ 20%: 0.7 point
+   - Relative error ≤ 30%: 0.3 point
 
-**Note**: Completeness reward removed (was 100% redundant with Format reward).
+**Gate Mechanism**: If Video Keyword Reward = 0 (no "This video shows"), then IoU/Peak Slice/Tumor Ratio rewards are all set to 0.
+
+**Note**: Weights reduced from previous version (10.5 → 4.5) to stabilize training and reduce gradient explosion.
 
 See implementation: [`verl/utils/reward_score/brain_tumor_3d.py`](verl/utils/reward_score/brain_tumor_3d.py)
 
