@@ -291,19 +291,14 @@ def compute_policy_loss(
     true_kl = ratio - 1 - negative_approx_kl
     ppo_kl_true = verl_F.masked_mean(true_kl, eos_mask)
 
-    # Debug: print KL statistics (remove this after debugging)
-    import sys
-    if hasattr(sys, '_kl_debug_counter'):
-        sys._kl_debug_counter += 1
-    else:
-        sys._kl_debug_counter = 1
-
-    if sys._kl_debug_counter <= 5:  # Only first 5 batches
-        print(f"\n[DEBUG KL batch {sys._kl_debug_counter}]")
-        print(f"  negative_approx_kl: min={negative_approx_kl.min().item():.6f}, max={negative_approx_kl.max().item():.6f}, mean={negative_approx_kl.mean().item():.6f}")
-        print(f"  ratio: min={ratio.min().item():.6f}, max={ratio.max().item():.6f}, mean={ratio.mean().item():.6f}")
-        print(f"  ppo_kl_approx: {ppo_kl_approx.item():.8f}")
-        print(f"  ppo_kl_true: {ppo_kl_true.item():.8f}")
+    # Debug: always print if KL is suspiciously 0 (remove this after debugging)
+    if ppo_kl_approx.abs() < 1e-6 and ppo_kl_true.abs() < 1e-6:
+        print(f"\n[WARNING] Both KL metrics are ~0!")
+        print(f"  log_prob stats: min={log_prob.min().item():.6f}, max={log_prob.max().item():.6f}, mean={log_prob.mean().item():.6f}")
+        print(f"  old_log_prob stats: min={old_log_prob.min().item():.6f}, max={old_log_prob.max().item():.6f}, mean={old_log_prob.mean().item():.6f}")
+        print(f"  negative_approx_kl stats: min={negative_approx_kl.min().item():.8f}, max={negative_approx_kl.max().item():.8f}, mean={negative_approx_kl.mean().item():.8f}")
+        print(f"  Are they the same tensor? {log_prob is old_log_prob}")
+        print(f"  log_prob requires_grad: {log_prob.requires_grad}, old_log_prob requires_grad: {old_log_prob.requires_grad}")
 
     pg_losses = -advantages * ratio
     pg_losses2 = -advantages * torch.clamp(ratio, 1.0 - cliprange, 1.0 + cliprange)
