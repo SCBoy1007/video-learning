@@ -19,7 +19,7 @@ worker:
     global_batch_size: 16  # Increased to 16 to align with Seg-Zero
     micro_batch_size_per_device_for_update: 2  # Updated to match shell script
     micro_batch_size_per_device_for_experience: 2  # Updated to match shell script
-    max_grad_norm: 1.0
+    max_grad_norm: 10.0  # Increased from 1.0 - grad_norm was 3836, need higher threshold
     use_kl_loss: true
     kl_loss_coef: 8.0e-2  # Restored to verified stable configuration (Oct 1)
     kl_loss_type: low_var_kl
