@@ -53,8 +53,10 @@ class CustomRewardManager:
                 'thinking_format': [],
                 'video_keyword': [],
                 'format': [],
-                'iou': [],
+                'bbox_2d_iou': [],
                 'peak_slice': [],
+                'start_slice': [],
+                'end_slice': [],
                 'tumor_ratio': []
             }
 
