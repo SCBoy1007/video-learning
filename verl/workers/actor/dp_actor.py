@@ -183,23 +183,27 @@ class DataParallelPPOActor(BasePPOActor):
                 # GRPO already does group-level normalization, but groups may have different scales
                 # This batch-level normalization stabilizes training when group variance is high
 
+                # Ensure response_mask is float for proper gradient computation
+                response_mask_float = response_mask.float()
+
                 # Compute masked mean and std (only valid tokens, ignore padding)
-                advantages_mean = verl_F.masked_mean(advantages, response_mask)
-                advantages_var = verl_F.masked_mean((advantages - advantages_mean) ** 2, response_mask)
+                advantages_mean = verl_F.masked_mean(advantages, response_mask_float)
+                advantages_var = verl_F.masked_mean((advantages - advantages_mean) ** 2, response_mask_float)
                 advantages_std = torch.sqrt(advantages_var + 1e-8)
 
                 # Check if batch normalization is needed using percentile-based criterion
                 # GRPO normalizes to std≈1, so we check if extreme values exceed reasonable range
                 valid_advantages = advantages[response_mask.bool()]
-                adv_p95 = torch.quantile(valid_advantages.abs(), 0.95) if valid_advantages.numel() > 0 else torch.tensor(0.0)
+                adv_p95 = torch.quantile(valid_advantages.abs(), 0.95) if valid_advantages.numel() > 0 else torch.tensor(0.0, device=advantages.device)
 
                 # Apply batch normalization only if 95th percentile > 1.5 (indicates high variance)
                 if adv_p95 > 1.5:
                     # Normalize and re-apply mask to ensure padding remains 0
-                    advantages_normalized = ((advantages - advantages_mean) / (advantages_std + 1e-8)) * response_mask
+                    advantages_normalized = ((advantages - advantages_mean) / (advantages_std + 1e-8)) * response_mask_float
                     batch_normalized = True
                 else:
-                    advantages_normalized = advantages  # GRPO normalization sufficient
+                    # Keep original advantages, but ensure padding is 0 (defensive programming)
+                    advantages_normalized = advantages * response_mask_float
                     batch_normalized = False
 
                 # Log normalization stats (aggregate across micro-batches)
