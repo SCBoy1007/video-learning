@@ -8,11 +8,12 @@ import pandas as pd
 # Your run information
 ENTITY = "shichang855-the-university-of-hong-kong"
 PROJECT = "brain_tumor_3d_4x80G"
-RUN_ID = "3plch6wm"  # Update this to your current run ID
+RUN_ID = "kxdz2qjq"  # Update this to your current run ID
+API_KEY = "79a1c2f2011c05dda9220a3e1dede19ef639f073"
 
 def export_run():
     print("Connecting to WandB...")
-    api = wandb.Api()
+    api = wandb.Api(api_key=API_KEY)
 
     run_path = f"{ENTITY}/{PROJECT}/{RUN_ID}"
     print(f"Fetching run: {run_path}")

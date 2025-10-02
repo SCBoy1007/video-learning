@@ -222,6 +222,23 @@ class DataParallelPPOActor(BasePPOActor):
                 # all return: (bsz, response_length)
                 entropy, log_prob = self._forward_micro_batch(model_inputs, temperature=temperature)
 
+                # ENHANCED DEBUG: Print detailed comparison of log_prob vs old_log_prob
+                if i == 0 and mb_idx == 0 and self.rank == 0:  # Only first mini-batch, first micro-batch, rank 0
+                    diff = (log_prob - old_log_prob).abs()
+                    print(f"\n{'='*80}")
+                    print(f"[ENHANCED DEBUG] Step {i+1}, Micro-batch {mb_idx}")
+                    print(f"{'='*80}")
+                    print(f"log_prob stats:")
+                    print(f"  shape: {log_prob.shape}")
+                    print(f"  min: {log_prob.min().item():.10f}, max: {log_prob.max().item():.10f}, mean: {log_prob.mean().item():.10f}")
+                    print(f"old_log_prob stats:")
+                    print(f"  min: {old_log_prob.min().item():.10f}, max: {old_log_prob.max().item():.10f}, mean: {old_log_prob.mean().item():.10f}")
+                    print(f"Absolute difference |log_prob - old_log_prob|:")
+                    print(f"  min: {diff.min().item():.15e}, max: {diff.max().item():.15e}, mean: {diff.mean().item():.15e}")
+                    print(f"Are they identical tensors? {torch.equal(log_prob, old_log_prob)}")
+                    print(f"Max relative error: {(diff / (old_log_prob.abs() + 1e-10)).max().item():.15e}")
+                    print(f"{'='*80}\n")
+
                 pg_loss, pg_clipfrac, ppo_kl_approx, ppo_kl_true = core_algos.compute_policy_loss(
                     old_log_prob=old_log_prob,
                     log_prob=log_prob,
