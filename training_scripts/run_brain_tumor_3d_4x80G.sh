@@ -47,6 +47,6 @@ python3 -m verl.trainer.main \
     trainer.experiment_name=${RUN_NAME} \
     trainer.save_checkpoint_path=brain_tumor_workdir/${RUN_NAME} \
     `# Experiment tuning params - THESE OVERRIDE brain_tumor_3d_4x80G.yaml` \
-    worker.actor.kl_loss_coef=8.0e-2 \
-    worker.actor.optim.lr=1.0e-5 \
+    worker.actor.kl_loss_coef=4.0e-2 \
+    worker.actor.optim.lr=5.0e-6 \
     worker.actor.max_grad_norm=1.0

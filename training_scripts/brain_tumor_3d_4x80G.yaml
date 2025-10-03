@@ -29,7 +29,7 @@ worker:
     use_kl_loss: true
 
     # ⚠️ OVERRIDDEN by run_brain_tumor_3d_4x80G.sh (line 50)
-    # Shell sets: kl_loss_coef=5.0e-3
+    # Shell sets: kl_loss_coef=4.0e-2
     kl_loss_coef: 8.0e-2  # Restored to fa1c9c8 stable configuration
 
     kl_loss_type: low_var_kl
@@ -40,7 +40,7 @@ worker:
       enable_gradient_checkpointing: true
     optim:
       # ⚠️ OVERRIDDEN by run_brain_tumor_3d_4x80G.sh (line 51)
-      # Shell sets: lr=1.0e-6
+      # Shell sets: lr=5.0e-6
       lr: 1.0e-5  # Restored to fa1c9c8 stable configuration
 
       weight_decay: 1.0e-2
