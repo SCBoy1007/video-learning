@@ -74,14 +74,21 @@ class NaiveRewardManager:
             prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=True)
             response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
 
-            # Support both new format (reward_model.ground_truth) and legacy format (ground_truth)
+            # Support multiple data formats for ground truth:
+            # 1. New format: reward_model.ground_truth
+            # 2. Legacy format: ground_truth at top level
+            # 3. Solution field: solution (common in brain tumor datasets)
             if "reward_model" in data_item.non_tensor_batch:
                 ground_truth = data_item.non_tensor_batch["reward_model"]["ground_truth"]
+            elif "ground_truth" in data_item.non_tensor_batch:
+                ground_truth = data_item.non_tensor_batch["ground_truth"]
+            elif "solution" in data_item.non_tensor_batch:
+                ground_truth = data_item.non_tensor_batch["solution"]
             else:
-                # Legacy format: ground_truth is at top level
-                ground_truth = data_item.non_tensor_batch.get("ground_truth", None)
+                ground_truth = None
 
-            data_source = data_item.non_tensor_batch[self.reward_fn_key]
+            # Support optional data_source field (use default if missing)
+            data_source = data_item.non_tensor_batch.get(self.reward_fn_key, "default")
             extra_info = data_item.non_tensor_batch.get("extra_info", {})
             num_turns = data_item.non_tensor_batch.get("__num_turns__", None)
             extra_info["num_turns"] = num_turns
