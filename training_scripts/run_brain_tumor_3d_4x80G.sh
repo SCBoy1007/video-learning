@@ -20,16 +20,11 @@ MODEL_PATH=pretrained_models/Qwen2.5-VL-7B-Instruct  # Use local model path to a
 
 RUN_NAME=$(basename "$0" .sh)
 
-# 训练数据集：高质量模态 + 脑膜瘤数据
-TRAIN_DATA="data/BraTS2024-BraTS-GLI-T1C/train,\
-data/BraTS2024-BraTS-GLI-T2F/train,\
-data/MSD-Task01-BrainTumour-T1Gd/train,\
-data/MSD-Task01-BrainTumour-FLAIR/train,\
-data/BraTS2024_MEN_RT_TrainingData_video/train"
+# 训练数据集：高质量模态 + 脑膜瘤数据（Hydra列表格式）
+TRAIN_DATA="[data/BraTS2024-BraTS-GLI-T1C/train,data/BraTS2024-BraTS-GLI-T2F/train,data/MSD-Task01-BrainTumour-T1Gd/train,data/MSD-Task01-BrainTumour-FLAIR/train,data/BraTS2024_MEN_RT_TrainingData_video/train]"
 
-# 验证集同样只用 BraTS 的 T1C/T2F
-VAL_DATA="data/BraTS2024-BraTS-GLI-Additional-T1C/train,\
-data/BraTS2024-BraTS-GLI-Additional-T2F/train"
+# 验证集同样只用 BraTS 的 T1C/T2F（Hydra列表格式）
+VAL_DATA="[data/BraTS2024-BraTS-GLI-Additional-T1C/train,data/BraTS2024-BraTS-GLI-Additional-T2F/train]"
 
 # ============================================================================
 # Parameter Override Section
