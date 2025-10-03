@@ -12,23 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Base class for Critic
+Base class for a critic
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict
 
 import torch
 
 from verl import DataProto
-from verl.workers.critic.config import CriticConfig
-
 
 __all__ = ["BasePPOCritic"]
 
 
 class BasePPOCritic(ABC):
-    def __init__(self, config: CriticConfig):
+    def __init__(self, config):
+        super().__init__()
         self.config = config
 
     @abstractmethod
@@ -37,6 +35,6 @@ class BasePPOCritic(ABC):
         pass
 
     @abstractmethod
-    def update_critic(self, data: DataProto) -> Dict[str, Any]:
+    def update_critic(self, data: DataProto):
         """Update the critic"""
         pass

@@ -11,13 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+Adapted from Cruise.
+"""
 
 import torch
 
-
-HALF_LIST = [16, "16", "fp16", "float16"]
-FLOAT_LIST = [32, "32", "fp32", "float32"]
-BFLOAT_LIST = ["bf16", "bfloat16"]
+HALF_LIST = [16, "16", "fp16", "float16", torch.float16]
+FLOAT_LIST = [32, "32", "fp32", "float32", torch.float32]
+BFLOAT_LIST = ["bf16", "bfloat16", torch.bfloat16]
 
 
 class PrecisionType:
@@ -34,6 +36,14 @@ class PrecisionType:
     FULL = "64"
     BFLOAT = "bf16"
     MIXED = "mixed"
+
+    @staticmethod
+    def supported_type(precision: str | int) -> bool:
+        return any(x == precision for x in PrecisionType)
+
+    @staticmethod
+    def supported_types() -> list[str]:
+        return [x.value for x in PrecisionType]
 
     @staticmethod
     def is_fp16(precision):

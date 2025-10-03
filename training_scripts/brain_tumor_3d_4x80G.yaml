@@ -12,6 +12,7 @@ data:
 
 algorithm:
   adv_estimator: grpo
+  norm_adv_by_std_in_grpo: false  # ✅ DR-GRPO: Disable std normalization
   kl_coef: 0.0  # KL penalty in reward calculation (0.0 = disabled, use kl_loss_coef instead)
 
 worker:
@@ -20,8 +21,9 @@ worker:
     micro_batch_size_per_device_for_update: 2  # Updated to match shell script
     micro_batch_size_per_device_for_experience: 2  # Updated to match shell script
     max_grad_norm: 1.0  # Strict clipping for stable training (fa1c9c8 stable config)
-    use_kl_loss: true
-    kl_loss_coef: 8.0e-2  # Restored to fa1c9c8 stable configuration
+    loss_agg_mode: "seq-mean-token-sum-norm"  # ✅ DR-GRPO: Sequence-level loss aggregation
+    use_kl_loss: false  # ✅ DR-GRPO: Disable KL loss for better exploration
+    kl_loss_coef: 8.0e-2  # Not used when use_kl_loss=false
     kl_loss_type: low_var_kl
     model:
       model_path: Qwen/Qwen2.5-VL-7B-Instruct  # ⚠️ Overridden by .sh to use local cache

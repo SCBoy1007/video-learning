@@ -31,7 +31,7 @@ extra_require = {
 def main():
     setup(
         name="verl",
-        version="0.2.0.dev0",
+        version="0.5.0.video-learning",
         package_dir={"": "."},
         packages=find_packages(where="."),
         url="https://github.com/volcengine/verl",

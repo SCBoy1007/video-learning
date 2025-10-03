@@ -13,8 +13,6 @@
 # limitations under the License.
 
 from .base import BasePPOCritic
-from .config import CriticConfig, ModelConfig
 from .dp_critic import DataParallelPPOCritic
 
-
-__all__ = ["BasePPOCritic", "CriticConfig", "DataParallelPPOCritic", "ModelConfig"]
+__all__ = ["BasePPOCritic", "DataParallelPPOCritic"]

@@ -15,71 +15,126 @@
 A Ray logger will receive logging info from different processes.
 """
 
+import datetime
+import logging
 import numbers
-from typing import Dict
+import pprint
+
+import torch
 
 
-def concat_dict_to_str(dict: Dict, step):
-    """
-    Tiered logging strategy:
-    - Steps 1-10: Print all metrics (full detail for debugging)
-    - Steps 11-50: Print core training metrics only
-    - Steps 51+: Print core metrics every 10 steps (reduce noise)
-    """
-    # Core training metrics (always important)
-    core_metrics = {
-        'actor/kl_loss', 'actor/kl_coef', 'actor/pg_loss', 'actor/pg_clipfrac',
-        'actor/ppo_kl_approx', 'actor/ppo_kl_true', 'actor/grad_norm', 'actor/lr',
-        'critic/score/mean', 'critic/rewards/mean', 'critic/advantages/mean'
-    }
-    # Debug metrics for gradient diagnosis (temporary, remove after diagnosis)
-    debug_metrics = [k for k in dict.keys() if k.startswith('debug/')]
-    core_metrics.update(debug_metrics)
-    # Reward breakdown (important for diagnosing reward hacking)
-    reward_metrics = [k for k in dict.keys() if k.startswith('reward/')]
-    core_metrics.update(reward_metrics)
-
-    # Determine what to print based on step
-    if step <= 10:
-        # Full detail for first 10 steps
-        keys_to_print = dict.keys()
-        prefix = f"step {step} [FULL]:"
-    elif step <= 50:
-        # Core metrics only for steps 11-50
-        keys_to_print = [k for k in dict.keys() if k in core_metrics]
-        prefix = f"step {step} [CORE]:"
-    else:
-        # Steps 51+: print every 10 steps
-        if step % 10 != 0:
-            return None  # Skip this step
-        keys_to_print = [k for k in dict.keys() if k in core_metrics]
-        prefix = f"step {step} [CORE]:"
-
-    output = [prefix]
-    for k in keys_to_print:
-        v = dict[k]
+def concat_dict_to_str(dict: dict, step):
+    output = [f"step:{step}"]
+    for k, v in dict.items():
         if isinstance(v, numbers.Number):
-            # Use more decimal places for learning rate and KL to show small values
-            if "lr" in k.lower() or "kl" in k.lower():
-                output.append(f"{k}:{v:.6f}")
-            else:
-                output.append(f"{k}:{v:.3f}")
-
+            output.append(f"{k}:{pprint.pformat(v)}")
     output_str = " - ".join(output)
     return output_str
 
 
 class LocalLogger:
-    def __init__(self, remote_logger=None, enable_wandb=False, print_to_console=False):
+    """
+    A local logger that logs messages to the console.
+
+    Args:
+        print_to_console (bool): Whether to print to the console.
+    """
+
+    def __init__(self, print_to_console=True):
         self.print_to_console = print_to_console
-        if print_to_console:
-            print("Using LocalLogger is deprecated. The constructor API will change.")
 
     def flush(self):
         pass
 
     def log(self, data, step):
         if self.print_to_console:
-            log_str = concat_dict_to_str(data, step=step)
-            if log_str:  # Only print if not None (skip filtered steps)
-                print(log_str, flush=True)
+            print(concat_dict_to_str(data, step=step), flush=True)
+
+
+class DecoratorLoggerBase:
+    """
+    Base class for all decorators that log messages.
+
+    Args:
+        role (str): The role (the name) of the logger.
+        logger (logging.Logger): The logger instance to use for logging.
+        level (int): The logging level.
+        rank (int): The rank of the process.
+        log_only_rank_0 (bool): If True, only log for rank 0.
+    """
+
+    def __init__(
+        self, role: str, logger: logging.Logger = None, level=logging.DEBUG, rank: int = 0, log_only_rank_0: bool = True
+    ):
+        self.role = role
+        self.logger = logger
+        self.level = level
+        self.rank = rank
+        self.log_only_rank_0 = log_only_rank_0
+        self.logging_function = self.log_by_logging
+        if logger is None:
+            self.logging_function = self.log_by_print
+
+    def log_by_print(self, log_str):
+        if not self.log_only_rank_0 or self.rank == 0:
+            print(f"{self.role} {log_str}", flush=True)
+
+    def log_by_logging(self, log_str):
+        if self.logger is None:
+            raise ValueError("Logger is not initialized")
+        if not self.log_only_rank_0 or self.rank == 0:
+            self.logger.log(self.level, f"{self.role} {log_str}")
+
+
+def print_rank_0(message):
+    """If distributed is initialized, print only on rank 0."""
+    if torch.distributed.is_initialized():
+        if torch.distributed.get_rank() == 0:
+            print(message, flush=True)
+    else:
+        print(message, flush=True)
+
+
+def print_with_rank(message: str, rank: int = 0, log_only_rank_0: bool = False):
+    """_summary_
+    Print a message with rank information.
+    This function prints the message only if `log_only_rank_0` is False or if the rank is 0.
+
+    Args:
+        message (str): _description_
+        rank (int, optional): _description_. Defaults to 0.
+        log_only_rank_0 (bool, optional): _description_. Defaults to False.
+    """
+    if not log_only_rank_0 or rank == 0:
+        print(f"[Rank {rank}] {message}", flush=True)
+
+
+def print_with_rank_and_timer(message: str, rank: int = 0, log_only_rank_0: bool = False):
+    """_summary_
+    Print a message with rank information and a timestamp.
+    This function prints the message only if `log_only_rank_0` is False or if the rank is 0.
+
+    Args:
+        message (str): _description_
+        rank (int, optional): _description_. Defaults to 0.
+        log_only_rank_0 (bool, optional): _description_. Defaults to False.
+    """
+    now = datetime.datetime.now()
+    message = f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] [Rank {rank}] {message}"
+    if not log_only_rank_0 or rank == 0:
+        print(message, flush=True)
+
+
+def log_with_rank(message: str, rank, logger: logging.Logger, level=logging.INFO, log_only_rank_0: bool = False):
+    """_summary_
+    Log a message with rank information using a logger.
+    This function logs the message only if `log_only_rank_0` is False or if the rank is 0.
+    Args:
+        message (str): The message to log.
+        rank (int): The rank of the process.
+        logger (logging.Logger): The logger instance to use for logging.
+        level (int, optional): The logging level. Defaults to logging.INFO.
+        log_only_rank_0 (bool, optional): If True, only log for rank 0. Defaults to False.
+    """
+    if not log_only_rank_0 or rank == 0:
+        logger.log(level, f"[Rank {rank}] {message}")
