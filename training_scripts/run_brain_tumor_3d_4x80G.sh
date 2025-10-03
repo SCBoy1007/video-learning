@@ -82,7 +82,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.enable_chunked_prefill=false \
     actor_rollout_ref.rollout.max_num_batched_tokens=32768 \
     actor_rollout_ref.rollout.free_cache_engine=true \
-    actor_rollout_ref.rollout.enforce_eager=true \
+    actor_rollout_ref.rollout.enforce_eager=false \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=2 \
     actor_rollout_ref.ref.fsdp_config.param_offload=true \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=2 \
