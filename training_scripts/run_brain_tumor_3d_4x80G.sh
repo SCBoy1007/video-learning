@@ -11,6 +11,7 @@ export RAY_DEDUP_LOGS=1                    # Deduplicate Ray logs across workers
 export TRANSFORMERS_NO_ADVISORY_WARNINGS=1 # Suppress transformers warnings
 export VLLM_LOGGING_LEVEL=WARNING          # Only show vLLM warnings/errors
 export TOKENIZERS_PARALLELISM=false        # Suppress tokenizer parallelism warnings
+export WANDB_MODE=${WANDB_MODE:-offline}   # Default to offline mode to avoid WANDB network stalls
 
 # Memory optimization
 # expandable_segments incompatible with vLLM, using max_split_size_mb instead
