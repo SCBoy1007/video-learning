@@ -755,6 +755,12 @@ class RayPPOTrainer:
                         # Update training step for curriculum learning (two-stage training)
                         if hasattr(self.reward_fn, 'set_training_step'):
                             self.reward_fn.set_training_step(self.global_steps)
+                            # Debug: Print stage transition
+                            if self.global_steps in [1, 50, 51]:
+                                stage = "Stage 1 (Format Only)" if self.global_steps <= 50 else "Stage 2 (Full Metrics)"
+                                print(f"\n{'='*80}")
+                                print(f"[CURRICULUM LEARNING] Step {self.global_steps}: {stage}")
+                                print(f"{'='*80}\n")
 
                         reward_tensor = self.reward_fn(batch)
                         batch.batch["token_level_scores"] = reward_tensor
