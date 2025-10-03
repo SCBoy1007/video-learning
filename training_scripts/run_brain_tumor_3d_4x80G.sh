@@ -38,15 +38,13 @@ data/BraTS2024-BraTS-GLI-Additional-T2F/train"
 #   2. Are actively being tuned (kl_coef, lr for experiments)
 # Other parameters should match YAML to avoid confusion.
 # ============================================================================
-python3 -m verl.trainer.main \
-    config=training_scripts/brain_tumor_3d_4x80G.yaml \
-    `# Dynamic paths (must be in shell script)` \
+python3 -m verl.trainer.main_ppo \
+    --config-path ../training_scripts \
+    --config-name brain_tumor_3d_4x80G \
     data.train_files=${TRAIN_DATA} \
     data.val_files=${VAL_DATA} \
-    worker.actor.model.model_path=${MODEL_PATH} \
+    actor_rollout_ref.model.path=${MODEL_PATH} \
     trainer.experiment_name=${RUN_NAME} \
-    trainer.save_checkpoint_path=brain_tumor_workdir/${RUN_NAME} \
-    `# Experiment tuning params (aligned with Seg-Zero baseline)` \
-    worker.actor.kl_loss_coef=5.0e-3 \
-    worker.actor.optim.lr=1.0e-6 \
-    worker.actor.max_grad_norm=200.0
+    trainer.default_local_dir=brain_tumor_workdir/${RUN_NAME} \
+    actor_rollout_ref.actor.optim.lr=1.0e-5 \
+    actor_rollout_ref.actor.grad_clip=1.0

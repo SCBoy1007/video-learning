@@ -637,6 +637,50 @@ def compute_3d_iou(box1, box2):
         return 0.0
 
 
+# ============================================================================
+# Wrapper function for verl v0.5.0 compatibility
+# ============================================================================
+def compute_score(data_source, solution_str, ground_truth, extra_info=None, **kwargs):
+    """
+    Wrapper function to make brain_tumor_3d_compute_score compatible with verl v0.5.0.
+
+    This function adapts the signature to match the expected format:
+        compute_score(data_source, solution_str, ground_truth, extra_info=None)
+
+    Args:
+        data_source: Dataset identifier (ignored for brain tumor task)
+        solution_str: The model's response string
+        ground_truth: Ground truth JSON string
+        extra_info: Additional information (ignored for brain tumor task)
+        **kwargs: Additional keyword arguments (ignored)
+
+    Returns:
+        dict: Score dictionary with 'score' and component scores
+    """
+    # Call the original function with return_details=True to get breakdown
+    total_score, details = brain_tumor_3d_compute_score(
+        predict_str=solution_str,
+        ground_truth=ground_truth,
+        return_details=True
+    )
+
+    # Return in the format expected by verl v0.5.0
+    # Include 'score' key for the main reward, plus all component scores
+    result = {
+        'score': total_score,
+        'thinking_format': details['thinking_format'],
+        'video_keyword': details['video_keyword'],
+        'format': details['format'],
+        'bbox_2d_iou': details['bbox_2d_iou'],
+        'peak_slice': details['peak_slice'],
+        'start_slice': details['start_slice'],
+        'end_slice': details['end_slice'],
+        'tumor_ratio': details['tumor_ratio'],
+    }
+
+    return result
+
+
 if __name__ == "__main__":
     # 测试代码 - 新格式: 2D bbox + slice range
     predict_str = """<think>This video shows an MRI sequence where tumor is located in right hemisphere, spanning slices 102-150</think><answer>[{"bbox_2d": [91, 33, 131, 84], "peak_slice": 124, "start_slice": 102, "end_slice": 150, "tumor_ratio": 0.022}]</answer>"""

@@ -1,69 +1,159 @@
+# DR-GRPO Training Configuration for 3D Brain Tumor Detection
+# Based on verl v0.5.0 Hydra structure
+# Hardware: 4x A100-80GB
+
+# Inherit from default ppo_trainer config
+defaults:
+  - /ppo_trainer
+
+# ============================================================================
+# Data Configuration
+# ============================================================================
 data:
-  train_files: None  # ⚠️ OVERRIDDEN by run_brain_tumor_3d_4x80G.sh
-  val_files: None    # ⚠️ OVERRIDDEN by run_brain_tumor_3d_4x80G.sh
+  # Overridden by shell script
+  train_files: null
+  val_files: null
+
+  # Prompt and response settings
   prompt_key: problem
-  max_prompt_length: 28000  # Increased to accommodate video tokens (155 frames × ~130 tokens/frame ≈ 20k + text)
-  max_response_length: 800  # Reduced from 1200 to prevent OOM during backward pass
-  rollout_batch_size: 16  # Aligned with Seg-Zero configuration
+  max_prompt_length: 28000  # Accommodate video tokens (155 frames × ~130 tokens/frame ≈ 20k + text)
+  max_response_length: 800   # Reduced from 1200 to prevent OOM during backward pass
+
+  # Training batch configuration
+  train_batch_size: 16       # Aligned with Seg-Zero configuration (rollout_batch_size)
+
+  # Data processing
   shuffle: true
   seed: 42
+  filter_overlong_prompts: false
+  truncation: error
+
+  # Reward function key (required by NaiveRewardManager)
+  reward_fn_key: data_source
+
+  # Vision-specific settings (for Qwen2.5-VL)
+  video_key: videos
   max_pixels: 12845056
   min_pixels: 3136
 
+# ============================================================================
+# Algorithm Configuration (DR-GRPO)
+# ============================================================================
 algorithm:
   adv_estimator: grpo
-  norm_adv_by_std_in_grpo: false  # ✅ DR-GRPO: Disable std normalization
-  kl_coef: 0.0  # KL penalty in reward calculation (0.0 = disabled, use kl_loss_coef instead)
 
-worker:
+  # ✅ DR-GRPO: Disable std normalization to remove length bias
+  norm_adv_by_std_in_grpo: false
+
+  # KL penalty configuration
+  use_kl_in_reward: false
+  kl_ctrl:
+    type: fixed
+    kl_coef: 0.0
+
+# ============================================================================
+# Custom Reward Function Configuration
+# ============================================================================
+custom_reward_function:
+  # Path to custom reward function file
+  path: verl/utils/reward_score/brain_tumor_3d.py
+
+  # Function name to call (wrapper function compatible with verl v0.5.0)
+  name: compute_score
+
+# ============================================================================
+# Actor, Rollout, and Reference Model Configuration
+# ============================================================================
+actor_rollout_ref:
+
+  # Model configuration
+  model:
+    path: Qwen/Qwen2.5-VL-7B-Instruct  # Overridden by shell script to use local cache
+    enable_gradient_checkpointing: true
+    use_remove_padding: true
+    use_fused_kernels: false
+
+  # Actor (Policy Model) Configuration
   actor:
-    global_batch_size: 16  # Increased to 16 to align with Seg-Zero
-    micro_batch_size_per_device_for_update: 2  # Updated to match shell script
-    micro_batch_size_per_device_for_experience: 2  # Updated to match shell script
-    max_grad_norm: 1.0  # Strict clipping for stable training (fa1c9c8 stable config)
-    loss_agg_mode: "seq-mean-token-sum-norm"  # ✅ DR-GRPO: Sequence-level loss aggregation
-    use_kl_loss: false  # ✅ DR-GRPO: Disable KL loss for better exploration
-    kl_loss_coef: 8.0e-2  # Not used when use_kl_loss=false
+    # Batch size configuration
+    ppo_mini_batch_size: 16              # Global batch size
+    ppo_micro_batch_size_per_gpu: 2      # Micro batch for update
+
+    # Gradient clipping
+    grad_clip: 1.0                       # Strict clipping for stable training (fa1c9c8 stable config)
+
+    # ✅ DR-GRPO: Sequence-level loss aggregation (remove length bias)
+    loss_agg_mode: seq-mean-token-sum-norm
+
+    # ✅ DR-GRPO: Disable KL loss for better exploration
+    use_kl_loss: false
+    kl_loss_coef: 8.0e-2                 # Not used when use_kl_loss=false
     kl_loss_type: low_var_kl
-    model:
-      model_path: Qwen/Qwen2.5-VL-7B-Instruct  # ⚠️ Overridden by .sh to use local cache
-      enable_gradient_checkpointing: true
+
+    # PPO configuration
+    ppo_epochs: 1
+    clip_ratio: 0.2
+    entropy_coeff: 0.0
+
+    # Optimizer configuration
     optim:
-      lr: 1.0e-5  # Restored to fa1c9c8 stable configuration
+      lr: 1.0e-5                         # Restored to fa1c9c8 stable configuration
       weight_decay: 1.0e-2
-      lr_warmup_steps_ratio: 0.0  # No warmup
-      training_steps: 1725  # ~115 batches × 15 episodes (batch_size=16)
-    fsdp:
-      param_offload: false
-      optimizer_offload: false
-      torch_dtype: null
-    offload:
+      lr_warmup_steps_ratio: 0.0         # No warmup
+
+    # FSDP configuration
+    fsdp_config:
       param_offload: true
       optimizer_offload: true
 
+  # Rollout (Inference) Configuration
   rollout:
-    temperature: 1.0
-    tensor_parallel_size: 1  # Single GPU inference (7B model fits easily)
-    gpu_memory_utilization: 0.55  # Further reduced from 0.6 to leave more room for FSDP
-    n: 8  # Increased to 8 for better GRPO gradient estimation and exploration
-    enable_chunked_prefill: false  # Disabled to avoid vLLM compatibility issues
-    max_num_batched_tokens: 32768  # Increased to handle video multi-modal embeddings
+    name: vllm
+    tensor_model_parallel_size: 1        # Single GPU inference (7B model fits easily)
+    gpu_memory_utilization: 0.55         # Further reduced from 0.6 to leave more room for FSDP
 
+    # GRPO sampling configuration
+    temperature: 1.0
+    n: 8                                 # Increased to 8 for better GRPO gradient estimation
+
+    # vLLM settings
+    enable_chunked_prefill: false        # Disabled to avoid vLLM compatibility issues
+    max_num_batched_tokens: 32768        # Increased to handle video multi-modal embeddings
+    free_cache_engine: true
+    enforce_eager: false
+
+    # Micro batch configuration for log prob computation
+    log_prob_micro_batch_size_per_gpu: 2
+
+  # Reference Model Configuration
   ref:
-    offload:
+    fsdp_config:
       param_offload: true
 
-  reward:
-    reward_type: function
-    compute_score: brain_tumor_3d
+    # Micro batch configuration for log prob computation
+    log_prob_micro_batch_size_per_gpu: 2
 
+# ============================================================================
+# Trainer Configuration
+# ============================================================================
 trainer:
-  total_episodes: 15  # Increased for proper RL training
-  logger: ["console", "wandb"]  # Enable WandB for score tracking
+  # Training duration
+  total_epochs: 15                       # Increased for proper RL training
+
+  # Logging
+  logger: ["console", "wandb"]
   project_name: brain_tumor_3d_4x80G
-  n_gpus_per_node: 4  # 4 GPUs per node
+  experiment_name: brain_tumor_3d_4x80G # Overridden by shell script
+
+  # Hardware configuration
+  n_gpus_per_node: 4                     # 4 GPUs per node
   nnodes: 1
-  save_freq: 10  # Save checkpoint every 10 steps
-  test_freq: 230  # Validate every 2 episodes (approx. 115 steps/episode × 2)
-  val_before_train: true  # Validate before training starts
+
+  # Checkpoint and validation
+  save_freq: 10                          # Save checkpoint every 10 steps
+  test_freq: 230                         # Validate every 2 epochs (approx. 115 steps/epoch × 2)
+  val_before_train: true                 # Validate before training starts
   val_only: false
+
+  # Checkpoint directory
+  default_local_dir: checkpoints/brain_tumor_3d_4x80G
