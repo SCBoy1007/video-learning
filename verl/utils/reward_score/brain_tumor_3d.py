@@ -657,6 +657,12 @@ def compute_score(data_source, solution_str, ground_truth, extra_info=None, **kw
     Returns:
         dict: Score dictionary with 'score' and component scores
     """
+    # DEBUG: Print first few model responses to diagnose the issue
+    import random
+    if random.random() < 0.01:  # Print 1% of samples
+        print(f"\n[DEBUG] Model response (first 500 chars): {solution_str[:500]}")
+        print(f"[DEBUG] Ground truth: {ground_truth}")
+
     # Call the original function with return_details=True to get breakdown
     total_score, details = brain_tumor_3d_compute_score(
         predict_str=solution_str,
