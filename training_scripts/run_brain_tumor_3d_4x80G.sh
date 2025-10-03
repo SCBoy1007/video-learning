@@ -45,13 +45,12 @@ python3 -m verl.trainer.main_ppo \
     data.max_response_length=800 \
     data.train_batch_size=16 \
     data.shuffle=true \
-    data.seed=42 \
     data.filter_overlong_prompts=false \
     data.truncation=error \
     data.reward_fn_key=data_source \
     data.video_key=videos \
-    data.max_pixels=12845056 \
-    data.min_pixels=3136 \
+    +data.max_pixels=12845056 \
+    +data.min_pixels=3136 \
     custom_reward_function.path=verl/utils/reward_score/brain_tumor_3d.py \
     custom_reward_function.name=compute_score \
     actor_rollout_ref.model.path=${MODEL_PATH} \
