@@ -98,12 +98,56 @@ class DataParallelPPOActor(BasePPOActor):
         else:
             grad_norm = nn.utils.clip_grad_norm_(self.actor_module.parameters(), max_norm=self.config.max_grad_norm)
 
+        # NaN Guard: Check for NaN/Inf in gradients before optimizer step
+        has_nan_or_inf = False
+
+        # Check if grad_norm itself is NaN/Inf
+        if not torch.isfinite(grad_norm):
+            has_nan_or_inf = True
+            if self.rank == 0:
+                print(f"\n{'='*80}")
+                print(f"⚠️  NaN GUARD TRIGGERED: grad_norm is {grad_norm.item()}")
+                print(f"{'='*80}")
+
+        # Check all parameter gradients for NaN/Inf
+        if not has_nan_or_inf:
+            for name, param in self.actor_module.named_parameters():
+                if param.grad is not None:
+                    if not torch.isfinite(param.grad).all():
+                        has_nan_or_inf = True
+                        if self.rank == 0:
+                            nan_count = (~torch.isfinite(param.grad)).sum().item()
+                            total_count = param.grad.numel()
+                            print(f"\n{'='*80}")
+                            print(f"⚠️  NaN GUARD TRIGGERED: Found NaN/Inf in gradients")
+                            print(f"   Parameter: {name}")
+                            print(f"   NaN/Inf count: {nan_count}/{total_count}")
+                            print(f"   grad_norm: {grad_norm.item():.4f}")
+                            print(f"{'='*80}")
+                        break
+
+        # If NaN/Inf detected, skip optimizer step and zero gradients
+        if has_nan_or_inf:
+            if self.rank == 0:
+                print(f"⚠️  SKIPPING optimizer step and zeroing gradients to prevent weight corruption")
+                if not hasattr(self, '_nan_guard_counter'):
+                    self._nan_guard_counter = 0
+                self._nan_guard_counter += 1
+                print(f"   Total NaN events: {self._nan_guard_counter}")
+
+            # Zero gradients to prevent accumulation of bad gradients
+            self.actor_optimizer.zero_grad()
+
+            # Return a safe grad_norm value (0.0) instead of NaN
+            return torch.tensor(0.0, device=grad_norm.device)
+
         # DEBUG: Check optimizer state after first step (only once)
         if self.rank == 0 and not hasattr(self, '_debug_optimizer_checked'):
             # Print optimizer state count before first step
             print(f"\n[OPTIMIZER STATE] Before first step: {len(self.actor_optimizer.state)} parameters with state")
             self._debug_optimizer_checked = True
 
+        # Safe to proceed with optimizer step
         self.actor_optimizer.step()
 
         # DEBUG: Verify optimizer state was initialized after first step
