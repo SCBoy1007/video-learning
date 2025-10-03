@@ -46,7 +46,7 @@ python3 -m verl.trainer.main \
     worker.actor.model.model_path=${MODEL_PATH} \
     trainer.experiment_name=${RUN_NAME} \
     trainer.save_checkpoint_path=brain_tumor_workdir/${RUN_NAME} \
-    `# Experiment tuning params (aligned with Seg-Zero baseline)` \
-    worker.actor.kl_loss_coef=5.0e-3 \
-    worker.actor.optim.lr=1.0e-6 \
-    worker.actor.max_grad_norm=200.0
+    `# Experiment tuning params - THESE OVERRIDE brain_tumor_3d_4x80G.yaml` \
+    worker.actor.kl_loss_coef=8.0e-2 \
+    worker.actor.optim.lr=1.0e-5 \
+    worker.actor.max_grad_norm=1.0
