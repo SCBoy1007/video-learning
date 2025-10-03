@@ -18,6 +18,7 @@ from transformers import PreTrainedTokenizer
 
 from verl import DataProto
 from verl.utils.reward_score import math_compute_score, r1v_compute_score, seg_compute_score, seg_strict_compute_score, vision_reasoner_compute_score, brain_tumor_3d_compute_score
+import os
 
 
 class CustomRewardManager:
@@ -25,6 +26,7 @@ class CustomRewardManager:
         self.tokenizer = tokenizer
         self.num_examine = num_examine
         self.compute_score_name = compute_score
+        self._current_step = 0  # Track current training step for curriculum learning
         if compute_score == "math":
             self.compute_score = math_compute_score
         elif compute_score == "r1v":
@@ -42,6 +44,12 @@ class CustomRewardManager:
 
         # Track if this compute_score supports detailed metrics
         self.supports_details = compute_score in ["brain_tumor_3d"]
+
+    def set_training_step(self, step: int):
+        """Update current training step for curriculum learning"""
+        self._current_step = step
+        # Also set environment variable for reward function to access
+        os.environ['VERL_TRAINING_STEP'] = str(step)
 
     def __call__(self, data: DataProto) -> torch.Tensor:
         reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
@@ -95,6 +103,14 @@ class CustomRewardManager:
             # Print first sample's full details per batch
             if already_print_detail < self.num_examine:
                 already_print_detail += 1
+
+                # Print training stage info for brain_tumor_3d
+                if self.supports_details and self.compute_score_name == "brain_tumor_3d":
+                    stage = "Stage 1 (Format Only)" if self._current_step <= 50 else "Stage 2 (Full Metrics)"
+                    print(f"\n{'='*80}")
+                    print(f"[Training Step {self._current_step}] {stage}")
+                    print(f"{'='*80}")
+
                 print("[prompt]", prompt_str)
                 print("[response]", response_str)
                 print("[ground_truth]", ground_truth)

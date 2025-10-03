@@ -752,6 +752,10 @@ class RayPPOTrainer:
                             raise NotImplementedError
 
                         # we combine with rule-based rm
+                        # Update training step for curriculum learning (two-stage training)
+                        if hasattr(self.reward_fn, 'set_training_step'):
+                            self.reward_fn.set_training_step(self.global_steps)
+
                         reward_tensor = self.reward_fn(batch)
                         batch.batch["token_level_scores"] = reward_tensor
 
