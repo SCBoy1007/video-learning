@@ -230,6 +230,17 @@ class RLHFDataset(Dataset):
                 # link: https://github.com/vllm-project/vllm/blob/3c545c0c3b98ee642373a308197d750d0e449403/vllm/multimodal/parse.py#L205
                 multi_modal_data["image"] = images
 
+            # Handle legacy video_path field - convert to videos field expected by verl v0.5.0
+            if "video_path" in row_dict and self.video_key not in row_dict:
+                import os
+                # Construct absolute video path
+                video_path = row_dict["video_path"]
+                # If video_path is relative, make it absolute using current working directory
+                if not os.path.isabs(video_path):
+                    video_path = os.path.abspath(video_path)
+                # Create videos field in the format expected by process_video
+                row_dict[self.video_key] = [{"type": "video", "video": f"file://{video_path}"}]
+
             videos = None
             if self.video_key in row_dict and row_dict.get(self.video_key, None) is not None:
                 videos = [process_video(video) for video in row_dict.pop(self.video_key)]
