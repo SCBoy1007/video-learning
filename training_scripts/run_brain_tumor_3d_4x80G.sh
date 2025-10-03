@@ -20,11 +20,12 @@ MODEL_PATH=pretrained_models/Qwen2.5-VL-7B-Instruct  # Use local model path to a
 
 RUN_NAME=$(basename "$0" .sh)
 
-# 训练数据集：高质量模态 + 脑膜瘤数据（Hydra列表格式）
-TRAIN_DATA="[data/BraTS2024-BraTS-GLI-T1C/train,data/BraTS2024-BraTS-GLI-T2F/train,data/MSD-Task01-BrainTumour-T1Gd/train,data/MSD-Task01-BrainTumour-FLAIR/train,data/BraTS2024_MEN_RT_TrainingData_video/train]"
+# 训练数据集：高质量模态 + 脑膜瘤数据（Parquet格式）
+# NOTE: Run convert_arrow_to_parquet.py first to generate .parquet files
+TRAIN_DATA="[data/BraTS2024-BraTS-GLI-T1C/train.parquet,data/BraTS2024-BraTS-GLI-T2F/train.parquet,data/MSD-Task01-BrainTumour-T1Gd/train.parquet,data/MSD-Task01-BrainTumour-FLAIR/train.parquet,data/BraTS2024_MEN_RT_TrainingData_video/train.parquet]"
 
-# 验证集同样只用 BraTS 的 T1C/T2F（Hydra列表格式）
-VAL_DATA="[data/BraTS2024-BraTS-GLI-Additional-T1C/train,data/BraTS2024-BraTS-GLI-Additional-T2F/train]"
+# 验证集同样只用 BraTS 的 T1C/T2F（Parquet格式）
+VAL_DATA="[data/BraTS2024-BraTS-GLI-Additional-T1C/train.parquet,data/BraTS2024-BraTS-GLI-Additional-T2F/train.parquet]"
 
 # ============================================================================
 # Parameter Override Section
