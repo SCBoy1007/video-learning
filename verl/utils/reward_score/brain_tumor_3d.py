@@ -15,24 +15,6 @@
 import re
 import json
 import numpy as np
-import os
-
-# Global step counter for two-stage training
-# Set via environment variable from training script
-_GLOBAL_TRAINING_STEP = 0
-
-def set_global_training_step(step: int):
-    """Set current training step for curriculum learning"""
-    global _GLOBAL_TRAINING_STEP
-    _GLOBAL_TRAINING_STEP = step
-
-def get_global_training_step() -> int:
-    """Get current training step"""
-    # Try environment variable first, fallback to global var
-    env_step = os.environ.get('VERL_TRAINING_STEP', None)
-    if env_step is not None:
-        return int(env_step)
-    return _GLOBAL_TRAINING_STEP
 
 
 def brain_tumor_3d_thinking_format_reward(predict_str: str) -> float:
@@ -449,19 +431,15 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
     """
     3D脑肿瘤检测总奖励函数 (最高4.5分) - 2D bbox + slice range版本
 
-    **两阶段训练策略**：
-    - Stage 1 (Steps 1-50): 只学习格式 (thinking + video_keyword + format)，医学指标全部mask为0
-    - Stage 2 (Steps 51+): 全部指标生效
-
     组成（平衡权重 + 门槛机制）：
     - 思维格式奖励: 0.5分 (必须有50+字符且非JSON的推理内容)
     - 视频关键词奖励: 0.5分 (必须以"This video shows"开头，作为医学测量的门槛)
     - 格式奖励: 0.5分 (JSON格式验证: bbox_2d, peak_slice, start_slice, end_slice, tumor_ratio)
-    - 2D bbox IoU奖励: 1.0分 (peak slice上的2D框，更容易学习) [Stage 2]
-    - 峰值切片奖励: 0.5分 (肿瘤最大的切片索引) [Stage 2]
-    - 起始切片奖励: 0.5分 (肿瘤起始的切片索引) [Stage 2]
-    - 结束切片奖励: 0.5分 (肿瘤结束的切片索引) [Stage 2]
-    - 肿瘤比例奖励: 0.5分 (体积比例) [Stage 2]
+    - 2D bbox IoU奖励: 1.0分 (peak slice上的2D框，更容易学习)
+    - 峰值切片奖励: 0.5分 (肿瘤最大的切片索引)
+    - 起始切片奖励: 0.5分 (肿瘤起始的切片索引)
+    - 结束切片奖励: 0.5分 (肿瘤结束的切片索引)
+    - 肿瘤比例奖励: 0.5分 (体积比例)
 
     **输出格式**：
     {
@@ -484,13 +462,6 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
     Returns:
         float or tuple: 总分或(总分, 详细字典)
     """
-    # Get current training step for curriculum learning
-    current_step = get_global_training_step()
-
-    # Stage 1: Steps 1-50, only learn format (mask medical metrics)
-    # Stage 2: Steps 51+, enable all metrics
-    stage1_format_only = (current_step <= 50)
-
     # Use centralized weights
     thinking_format_reward = brain_tumor_3d_thinking_format_reward(predict_str) * REWARD_WEIGHTS['thinking_format']
 
@@ -500,17 +471,16 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
 
     format_reward = brain_tumor_3d_format_reward(predict_str) * REWARD_WEIGHTS['format']
 
-    # Medical metrics: masked in Stage 1 (first 50 steps)
-    if stage1_format_only or video_keyword_raw == 0:
-        # Stage 1: Force all medical metrics to 0 to focus on format learning
-        # OR video_keyword gate not satisfied
+    # Medical metrics: gated by video_keyword
+    if video_keyword_raw == 0:
+        # Video keyword gate not satisfied - no medical metrics
         bbox_2d_iou_reward = 0.0
         peak_slice_reward = 0.0
         start_slice_reward = 0.0
         end_slice_reward = 0.0
         ratio_reward = 0.0
     else:
-        # Stage 2: Enable medical metrics
+        # Video keyword gate satisfied - enable medical metrics
         bbox_2d_iou_reward = brain_tumor_2d_bbox_iou_reward(predict_str, ground_truth) * REWARD_WEIGHTS['bbox_2d_iou']
         peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['peak_slice']
         start_slice_reward = brain_tumor_start_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['start_slice']
