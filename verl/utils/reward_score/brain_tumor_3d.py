@@ -452,6 +452,7 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
 
     **完全门控机制（Full-Gate Policy）**：
     如果 video_keyword = 0（未写"This video shows"），则所有医学测量奖励为0（×0.0）。
+    如果输出达到max_length (640)，则直接返回0分（防止无限重复）。
 
     Args:
         predict_str: 模型预测字符串
@@ -461,6 +462,14 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
     Returns:
         float or tuple: 总分或(总分, 详细字典)
     """
+    # Length check: if output hits max_length, return 0 (prevent infinite repetition)
+    MAX_RESPONSE_LENGTH = 640
+    response_text = predict_str.split('assistant')[-1].strip() if 'assistant' in predict_str else predict_str
+    if len(response_text) >= MAX_RESPONSE_LENGTH:
+        if return_details:
+            return 0.0, {'length_exceeded': True, 'total': 0.0}
+        return 0.0
+
     # Use centralized weights
     thinking_format_reward = brain_tumor_3d_thinking_format_reward(predict_str) * REWARD_WEIGHTS['thinking_format']
 
