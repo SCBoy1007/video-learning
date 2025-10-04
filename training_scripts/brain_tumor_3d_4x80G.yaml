@@ -5,7 +5,7 @@ data:
   val_files: None
   prompt_key: problem
   max_prompt_length: 28000  # Increased to accommodate video tokens (155 frames × ~130 tokens/frame ≈ 20k + text)
-  max_response_length: 800  # Reduced from 1200 to prevent OOM during backward pass
+  max_response_length: 640  # Further reduced to prevent OOM during backward pass
   rollout_batch_size: 16  # Aligned with Seg-Zero configuration
   shuffle: true
   seed: 42
