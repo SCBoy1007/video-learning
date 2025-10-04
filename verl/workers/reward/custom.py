@@ -87,7 +87,12 @@ class CustomRewardManager:
 
             # Get score with optional details
             if self.supports_details:
-                score, details = self.compute_score(response_str, ground_truth, return_details=True)
+                # Pass token length for brain_tumor_3d to detect max_length
+                score, details = self.compute_score(
+                    response_str, ground_truth,
+                    return_details=True,
+                    response_token_length=valid_response_length.item()
+                )
                 # Accumulate sub-metrics
                 for key in metric_accumulators:
                     metric_accumulators[key].append(details[key])

@@ -427,7 +427,7 @@ def get_reward_weights():
     return REWARD_WEIGHTS.copy()
 
 
-def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_details: bool = False):
+def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_details: bool = False, response_token_length: int = None):
     """
     3D脑肿瘤检测总奖励函数 (最高4.5分) - 2D bbox + slice range版本
 
@@ -457,10 +457,24 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
         predict_str: 模型预测字符串
         ground_truth: Ground truth JSON字符串 (包含bbox_3d, peak_slice, tumor_ratio)
         return_details: 如果为True，返回(total_score, details_dict)，否则只返回total_score
+        response_token_length: 可选，response的token数量（用于检测max_length）
 
     Returns:
         float or tuple: 总分或(总分, 详细字典)
     """
+    # Max length check: if response reaches 640 tokens (max_response_length), return 0
+    # This indicates mode collapse or infinite repetition
+    MAX_RESPONSE_TOKENS = 640
+    if response_token_length is not None and response_token_length >= MAX_RESPONSE_TOKENS:
+        if return_details:
+            return 0.0, {
+                'length_exceeded': True,
+                'thinking_format': 0.0, 'video_keyword': 0.0, 'format': 0.0,
+                'bbox_2d_iou': 0.0, 'peak_slice': 0.0, 'start_slice': 0.0,
+                'end_slice': 0.0, 'tumor_ratio': 0.0, 'total': 0.0
+            }
+        return 0.0
+
     # Use centralized weights
     thinking_format_reward = brain_tumor_3d_thinking_format_reward(predict_str) * REWARD_WEIGHTS['thinking_format']
 
