@@ -450,9 +450,9 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
       "tumor_ratio": 0.022           // 体积比例
     }
 
-    **半门槛机制（Half-Gate Policy）**：
-    如果 video_keyword = 0（未写"This video shows"），则所有医学测量奖励打7折（×0.7）。
-    逻辑：鼓励写"This video shows"，但不完全阻断医学任务的学习。
+    **完全门控机制（Full-Gate Policy）**：
+    如果 video_keyword = 0（未写"This video shows"），则所有医学测量奖励为0（×0.0）。
+    如果输出达到max_length (640)，则直接返回0分（防止无限重复）。
 
     Args:
         predict_str: 模型预测字符串
@@ -462,6 +462,14 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
     Returns:
         float or tuple: 总分或(总分, 详细字典)
     """
+    # Length check: if output hits max_length, return 0 (prevent infinite repetition)
+    MAX_RESPONSE_LENGTH = 640
+    response_text = predict_str.split('assistant')[-1].strip() if 'assistant' in predict_str else predict_str
+    if len(response_text) >= MAX_RESPONSE_LENGTH:
+        if return_details:
+            return 0.0, {'length_exceeded': True, 'total': 0.0}
+        return 0.0
+
     # Use centralized weights
     thinking_format_reward = brain_tumor_3d_thinking_format_reward(predict_str) * REWARD_WEIGHTS['thinking_format']
 
@@ -471,10 +479,9 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
 
     format_reward = brain_tumor_3d_format_reward(predict_str) * REWARD_WEIGHTS['format']
 
-    # Medical metrics: half-gated by video_keyword
-    # Gate policy: if video_keyword not satisfied, medical metrics get 30% penalty (×0.7 discount)
-    # This allows the model to learn medical tasks even without perfect video keyword compliance
-    medical_penalty = 0.7 if video_keyword_raw == 0 else 1.0
+    # Medical metrics: FULLY gated by video_keyword
+    # Gate policy: if video_keyword not satisfied, medical metrics get 0 reward (complete blockage)
+    medical_penalty = 0.0 if video_keyword_raw == 0 else 1.0
 
     bbox_2d_iou_reward = brain_tumor_2d_bbox_iou_reward(predict_str, ground_truth) * REWARD_WEIGHTS['bbox_2d_iou'] * medical_penalty
     peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['peak_slice'] * medical_penalty
