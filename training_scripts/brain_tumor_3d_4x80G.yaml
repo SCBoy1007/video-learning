@@ -55,7 +55,7 @@ worker:
       optimizer_offload: true
 
   rollout:
-    temperature: 1.0
+    temperature: 1.8
     tensor_parallel_size: 1  # Single GPU inference (7B model fits easily)
     gpu_memory_utilization: 0.55  # Further reduced from 0.6 to leave more room for FSDP
     n: 8  # Increased to 8 for better GRPO gradient estimation and exploration

@@ -48,5 +48,4 @@ python3 -m verl.trainer.main \
     `# Experiment tuning params - THESE OVERRIDE brain_tumor_3d_4x80G.yaml` \
     worker.actor.kl_loss_coef=5.0e-2 \
     worker.actor.optim.lr=1.0e-5 \
-    worker.actor.max_grad_norm=100.0 \
-    worker.rollout.temperature=1.8
+    worker.actor.max_grad_norm=100.0
