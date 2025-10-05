@@ -49,7 +49,7 @@ worker:
     fsdp:
       param_offload: false
       optimizer_offload: false
-      torch_dtype: null
+      torch_dtype: "bf16"  # Use BF16 to enable Flash Attention 2.0
     offload:
       param_offload: true
       optimizer_offload: true
