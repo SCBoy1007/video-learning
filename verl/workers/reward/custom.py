@@ -44,8 +44,12 @@ class CustomRewardManager:
         self.supports_details = compute_score in ["brain_tumor_3d"]
 
     def set_training_step(self, step: int):
-        """Update current training step (for extensibility)"""
-        pass  # Reserved for future use
+        """Update current training step for progressive gate mechanism"""
+        self.current_step = step
+        # Update global step in brain_tumor_3d module if applicable
+        if self.compute_score_name == "brain_tumor_3d":
+            from verl.utils.reward_score.brain_tumor_3d import set_training_step
+            set_training_step(step)
 
     def __call__(self, data: DataProto) -> torch.Tensor:
         reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
