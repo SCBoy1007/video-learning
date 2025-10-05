@@ -458,15 +458,17 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
       "tumor_ratio": 0.022           // 体积比例
     }
 
-    **渐进式软门控机制（Progressive Soft Gate Policy）**：
+    **放宽版渐进式门控机制（Relaxed Progressive Gate Policy）**：
     - 格式完美（三项都满分）：医学任务获得100%奖励
     - 格式不完美：
-      * Step 0-50: 医学任务获得70%→0%奖励（线性递减）
-      * Step 50+:  医学任务获得0%奖励（严格门控）
+      * Step 0-20:  医学任务获得100%奖励（无门控，自由探索）
+      * Step 20-50: 医学任务获得100%→50%奖励（线性递减）
+      * Step 50+:   医学任务获得50%奖励（最大门控强度50%）
 
     目的：
-    1. 初期（step 0-50）允许探索，避免reward信号过于稀疏
-    2. 后期（step 50+）强制格式要求，防止格式遗忘
+    1. 初期（step 0-20）完全无门控，优先学习医学任务
+    2. 中期（step 20-50）逐渐引入格式约束
+    3. 后期（step 50+）维持50%奖励，避免完全阻断医学学习
 
     Args:
         predict_str: 模型预测字符串
@@ -500,25 +502,29 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
     video_keyword_reward = video_keyword_raw * REWARD_WEIGHTS['video_keyword']
     format_reward = format_raw * REWARD_WEIGHTS['format']
 
-    # Progressive Soft Gate Policy:
+    # Relaxed Progressive Gate Policy:
     # - If format tasks are perfect: medical_gate = 1.0 (full reward)
-    # - If format tasks are not perfect: medical_gate decreases linearly from 0.7 to 0.0
-    #   * Step 0-50: Linear decay from 0.7 to 0.0
-    #   * Step 50+: Strict gate (0.0)
-    # This allows early exploration while gradually enforcing format requirements
+    # - If format tasks are not perfect:
+    #   * Step 0-20: medical_gate = 1.0 (100% medical reward, no gating)
+    #   * Step 20-50: medical_gate linearly decreases from 1.0 to 0.5 (gating strength 0%→50%)
+    #   * Step 50+: medical_gate = 0.5 (maximum gating strength 50%, still allows learning)
+    # This allows early exploration and prevents complete blocking of medical tasks
     format_all_perfect = (thinking_format_raw == 1.0 and video_keyword_raw == 1.0 and format_raw == 1.0)
 
     if format_all_perfect:
         medical_gate = 1.0  # Full reward for perfect format
     else:
-        # Progressive gate: Start at 0.7 (70% medical reward), linearly decrease to 0.0 at step 50
         global _CURRENT_TRAINING_STEP
-        if _CURRENT_TRAINING_STEP < 50:
-            # Linear decay: 0.7 at step 0, 0.0 at step 50
-            medical_gate = 0.7 * (1.0 - _CURRENT_TRAINING_STEP / 50.0)
+        if _CURRENT_TRAINING_STEP <= 20:
+            # Step 0-20: No gating, full medical reward
+            medical_gate = 1.0
+        elif _CURRENT_TRAINING_STEP <= 50:
+            # Step 20-50: Gradual gating, linearly decrease from 1.0 to 0.5
+            progress = (_CURRENT_TRAINING_STEP - 20) / 30.0
+            medical_gate = 1.0 - 0.5 * progress
         else:
-            # After step 50: Strict gate (complete blocking)
-            medical_gate = 0.0
+            # Step 50+: Maximum gating strength 50% (still allows medical learning)
+            medical_gate = 0.5
 
     bbox_2d_iou_reward = brain_tumor_2d_bbox_iou_reward(predict_str, ground_truth) * REWARD_WEIGHTS['bbox_2d_iou'] * medical_gate
     peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['peak_slice'] * medical_gate
