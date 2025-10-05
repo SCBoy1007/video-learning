@@ -99,35 +99,23 @@ class DataParallelPPOActor(BasePPOActor):
             grad_norm = nn.utils.clip_grad_norm_(self.actor_module.parameters(), max_norm=self.config.max_grad_norm)
 
         # NaN Guard: Check for NaN/Inf in gradients before optimizer step
-        has_nan_or_inf = False
+        grad_finite = torch.isfinite(grad_norm)
 
-        # Check if grad_norm itself is NaN/Inf
-        if not torch.isfinite(grad_norm):
-            has_nan_or_inf = True
-            if self.rank == 0:
-                print(f"\n{'='*80}")
-                print(f"⚠️  NaN GUARD TRIGGERED: grad_norm is {grad_norm.item()}")
-                print(f"{'='*80}")
-
-        # Check all parameter gradients for NaN/Inf
-        if not has_nan_or_inf:
-            for name, param in self.actor_module.named_parameters():
-                if param.grad is not None:
-                    if not torch.isfinite(param.grad).all():
-                        has_nan_or_inf = True
-                        if self.rank == 0:
-                            nan_count = (~torch.isfinite(param.grad)).sum().item()
-                            total_count = param.grad.numel()
-                            print(f"\n{'='*80}")
-                            print(f"⚠️  NaN GUARD TRIGGERED: Found NaN/Inf in gradients")
-                            print(f"   Parameter: {name}")
-                            print(f"   NaN/Inf count: {nan_count}/{total_count}")
-                            print(f"   grad_norm: {grad_norm.item():.4f}")
-                            print(f"{'='*80}")
-                        break
+        # Check all parameter gradients for NaN/Inf (do this regardless of grad_norm status)
+        for name, param in self.actor_module.named_parameters():
+            if param.grad is not None:
+                if not torch.isfinite(param.grad).all():
+                    if self.rank == 0:
+                        nan_count = (~torch.isfinite(param.grad)).sum().item()
+                        total_count = param.grad.numel()
+                        print(f"\n{'='*80}")
+                        print(f"⚠️  Grad NaN: {name}, NaN count={nan_count} / {total_count}")
+                        print(f"{'='*80}")
+                    grad_finite = False
+                    break
 
         # If NaN/Inf detected, skip optimizer step and zero gradients
-        if has_nan_or_inf:
+        if not grad_finite:
             if self.rank == 0:
                 print(f"⚠️  SKIPPING optimizer step and zeroing gradients to prevent weight corruption")
                 if not hasattr(self, '_nan_guard_counter'):
@@ -351,6 +339,31 @@ class DataParallelPPOActor(BasePPOActor):
                 metrics["debug/total_policy_loss"] = policy_loss.detach().item()
 
                 loss = policy_loss / gradient_accumulation
+
+                # NaN Check before backward
+                skip_this_mb = False
+                for tensor_name, tensor in [
+                    ("pg_loss", pg_loss),
+                    ("entropy_loss", entropy_loss),
+                    ("policy_loss", policy_loss),
+                    ("advantages_normalized", advantages_normalized),
+                    ("loss", loss)
+                ]:
+                    if not torch.isfinite(tensor).all():
+                        if self.rank == 0:
+                            print(f"⚠️ {tensor_name} 非有限，跳过该 mini-batch")
+                        skip_this_mb = True
+                        break
+
+                # Check kl_loss if it exists
+                if self.config.use_kl_loss and 'kl_loss' in locals():
+                    if not torch.isfinite(kl_loss).all():
+                        if self.rank == 0:
+                            print(f"⚠️ kl_loss 非有限，跳过该 mini-batch")
+                        skip_this_mb = True
+
+                if skip_this_mb:
+                    continue
 
                 loss.backward()
 

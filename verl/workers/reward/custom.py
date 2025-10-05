@@ -91,13 +91,20 @@ class CustomRewardManager:
                 score, details = self.compute_score(
                     response_str, ground_truth,
                     return_details=True,
-                    response_token_length=valid_response_length.item()
+                    response_token_length=int(valid_response_length.item())
                 )
                 # Accumulate sub-metrics
                 for key in metric_accumulators:
                     metric_accumulators[key].append(details[key])
             else:
                 score = self.compute_score(response_str, ground_truth)
+
+            # NaN Detection: Check if score is valid before assigning
+            if not isinstance(score, (int, float)) or score != score:  # NaN check
+                print(f"⚠️  WARNING: Invalid score detected: {score}")
+                print(f"   Response length: {valid_response_length.item()}")
+                print(f"   Response preview: {response_str[:200]}...")
+                score = 0.0  # Fallback to 0 instead of NaN
 
             reward_tensor[i, valid_response_length - 1] = score
 
