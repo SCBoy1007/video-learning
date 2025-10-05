@@ -127,8 +127,8 @@ class CustomRewardManager:
                         # Fallback to default if import fails
                         weights = {
                             'thinking_format': 0.5, 'video_keyword': 0.5, 'format': 0.5,
-                            'bbox_2d_iou': 1.0, 'peak_slice': 0.5, 'start_slice': 0.5,
-                            'end_slice': 0.5, 'tumor_ratio': 0.5
+                            'bbox_2d_iou': 2.0, 'peak_slice': 1.0, 'start_slice': 1.0,
+                            'end_slice': 1.0, 'tumor_ratio': 1.0
                         }
 
                     print(f"  └─ thinking_format: {details['thinking_format']:.2f}/{weights['thinking_format']:.1f} | "

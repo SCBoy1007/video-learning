@@ -413,11 +413,11 @@ REWARD_WEIGHTS = {
     'thinking_format': 0.5,  # 推理格式质量
     'video_keyword': 0.5,    # 视频分析门槛
     'format': 0.5,           # JSON格式验证
-    'bbox_2d_iou': 1.0,      # 2D边界框IoU (peak slice上的2D框，更容易学习)
-    'peak_slice': 0.5,       # 峰值切片准确性
-    'start_slice': 0.5,      # 起始切片准确性
-    'end_slice': 0.5,        # 结束切片准确性
-    'tumor_ratio': 0.5,      # 肿瘤比例准确性
+    'bbox_2d_iou': 2.0,      # 2D边界框IoU (peak slice上的2D框) - 增加权重强化学习
+    'peak_slice': 1.0,       # 峰值切片准确性 - 增加权重
+    'start_slice': 1.0,      # 起始切片准确性 - 增加权重
+    'end_slice': 1.0,        # 结束切片准确性 - 增加权重
+    'tumor_ratio': 1.0,      # 肿瘤比例准确性 - 增加权重
     # non_repeat removed - should be handled during sampling, not as reward
 }
 
@@ -429,17 +429,17 @@ def get_reward_weights():
 
 def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_details: bool = False, response_token_length: int = None):
     """
-    3D脑肿瘤检测总奖励函数 (最高4.5分) - 2D bbox + slice range版本
+    3D脑肿瘤检测总奖励函数 (最高7.5分) - 2D bbox + slice range版本
 
-    组成（平衡权重 + 门槛机制）：
+    组成（强化医学任务权重 + 严格门控）：
     - 思维格式奖励: 0.5分 (必须有50+字符且非JSON的推理内容)
-    - 视频关键词奖励: 0.5分 (必须以"This video shows"开头，作为医学测量的门槛)
+    - 视频关键词奖励: 0.5分 (必须以"This video shows"开头)
     - 格式奖励: 0.5分 (JSON格式验证: bbox_2d, peak_slice, start_slice, end_slice, tumor_ratio)
-    - 2D bbox IoU奖励: 1.0分 (peak slice上的2D框，更容易学习)
-    - 峰值切片奖励: 0.5分 (肿瘤最大的切片索引)
-    - 起始切片奖励: 0.5分 (肿瘤起始的切片索引)
-    - 结束切片奖励: 0.5分 (肿瘤结束的切片索引)
-    - 肿瘤比例奖励: 0.5分 (体积比例)
+    - 2D bbox IoU奖励: 2.0分 (peak slice上的2D框) - 强化学习
+    - 峰值切片奖励: 1.0分 (肿瘤最大的切片索引) - 强化学习
+    - 起始切片奖励: 1.0分 (肿瘤起始的切片索引) - 强化学习
+    - 结束切片奖励: 1.0分 (肿瘤结束的切片索引) - 强化学习
+    - 肿瘤比例奖励: 1.0分 (体积比例) - 强化学习
 
     **输出格式**：
     {
@@ -450,8 +450,11 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
       "tumor_ratio": 0.022           // 体积比例
     }
 
-    **完全门控机制（Full-Gate Policy）**：
-    如果 video_keyword = 0（未写"This video shows"），则所有医学测量奖励为0（×0.0）。
+    **严格门控机制（Strict Gate Policy）**：
+    只有当 thinking_format、video_keyword、format **三个格式任务都拿满分** 时，
+    医学任务才会计分。否则医学任务全部为0分。
+
+    目的：强制模型先学会基本格式，再允许获取医学任务奖励，避免"刷格式分"策略。
 
     Args:
         predict_str: 模型预测字符串
@@ -475,24 +478,26 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
             }
         return 0.0
 
-    # Use centralized weights
-    thinking_format_reward = brain_tumor_3d_thinking_format_reward(predict_str) * REWARD_WEIGHTS['thinking_format']
-
-    # Video keyword as a gate: if not satisfied, medical measurements are invalid
+    # Calculate raw scores for format tasks
+    thinking_format_raw = brain_tumor_3d_thinking_format_reward(predict_str)
     video_keyword_raw = brain_tumor_3d_video_keyword_reward(predict_str)
+    format_raw = brain_tumor_3d_format_reward(predict_str)
+
+    # Apply weights to format rewards
+    thinking_format_reward = thinking_format_raw * REWARD_WEIGHTS['thinking_format']
     video_keyword_reward = video_keyword_raw * REWARD_WEIGHTS['video_keyword']
+    format_reward = format_raw * REWARD_WEIGHTS['format']
 
-    format_reward = brain_tumor_3d_format_reward(predict_str) * REWARD_WEIGHTS['format']
+    # Strict Gate Policy: All three format tasks must be perfect (raw score = 1.0)
+    # Only then medical tasks can earn rewards
+    format_all_perfect = (thinking_format_raw == 1.0 and video_keyword_raw == 1.0 and format_raw == 1.0)
+    medical_gate = 1.0 if format_all_perfect else 0.0
 
-    # Medical metrics: FULLY gated by video_keyword
-    # Gate policy: if video_keyword not satisfied, medical metrics get 0 reward (complete blockage)
-    medical_penalty = 0.0 if video_keyword_raw == 0 else 1.0
-
-    bbox_2d_iou_reward = brain_tumor_2d_bbox_iou_reward(predict_str, ground_truth) * REWARD_WEIGHTS['bbox_2d_iou'] * medical_penalty
-    peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['peak_slice'] * medical_penalty
-    start_slice_reward = brain_tumor_start_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['start_slice'] * medical_penalty
-    end_slice_reward = brain_tumor_end_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['end_slice'] * medical_penalty
-    ratio_reward = brain_tumor_3d_ratio_reward(predict_str, ground_truth) * REWARD_WEIGHTS['tumor_ratio'] * medical_penalty
+    bbox_2d_iou_reward = brain_tumor_2d_bbox_iou_reward(predict_str, ground_truth) * REWARD_WEIGHTS['bbox_2d_iou'] * medical_gate
+    peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['peak_slice'] * medical_gate
+    start_slice_reward = brain_tumor_start_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['start_slice'] * medical_gate
+    end_slice_reward = brain_tumor_end_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['end_slice'] * medical_gate
+    ratio_reward = brain_tumor_3d_ratio_reward(predict_str, ground_truth) * REWARD_WEIGHTS['tumor_ratio'] * medical_gate
 
     total_reward = thinking_format_reward + video_keyword_reward + format_reward + bbox_2d_iou_reward + peak_slice_reward + start_slice_reward + end_slice_reward + ratio_reward
 
