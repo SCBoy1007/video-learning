@@ -41,7 +41,8 @@ python3 -m verl.trainer.main \
     data.val_files=${VAL_DATA} \
     worker.actor.model.model_path=${MODEL_PATH} \
     worker.actor.kl_loss_coef=1.0e-2 \
-    worker.actor.optim.lr=1.0e-6 \
+    worker.actor.optim.lr=5.0e-6 \
+    worker.actor.max_grad_norm=5.0 \
     worker.reward.compute_score=vision_reasoner \
     trainer.experiment_name=${RUN_NAME} \
     trainer.save_checkpoint_path=brain_tumor_workdir/${RUN_NAME}
