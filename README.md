@@ -12,10 +12,6 @@ This repository is a **research fork** of [Seg-Zero](https://github.com/dvlab-re
 2. **Input**: 2D images → **Multi-frame medical videos** (4-modality MRI concatenation)
 3. **Output**: Segmentation masks → **Structured JSON** with:
    - `bbox_2d`: 2D bounding box on peak slice `[x1, y1, x2, y2]`
-   - `peak_slice`: Peak tumor slice index
-   - `start_slice`: Tumor start slice index
-   - `end_slice`: Tumor end slice index
-   - `tumor_ratio`: Tumor volume ratio
 4. **Datasets**: RefCOCOg/ReasonSeg → **BraTS 2024 & MSD Brain Tumor MRI**
 5. **Reward Function**: IoU-based segmentation rewards → **2D IoU + slice range + multi-metric rewards**
 
@@ -85,35 +81,19 @@ Logs are automatically sent to **Weights & Biases** (project: `brain_tumor_3d_4x
 
 ## Reward Function
 
-The custom reward function evaluates predictions across multiple dimensions (max score: 4.5):
+The custom reward function evaluates predictions across multiple dimensions (max score: 3.5):
 
 1. **Thinking Format Reward** (0.5): Strict `<think>...</think><answer>...</answer>` format with meaningful content (≥50 chars)
 2. **Video Keyword Reward** (0.5): Thinking must start with "This video shows" to reinforce video awareness
-3. **Format Reward** (0.5): Valid JSON structure with required fields (`bbox_2d`, `peak_slice`, `start_slice`, `end_slice`, `tumor_ratio`)
-4. **2D Bbox IoU Reward** (1.0): 2D bounding box overlap on peak slice (easier to learn than 3D)
-   - IoU ≥ 0.7: 1.0 point (full score)
+3. **Format Reward** (0.5): Valid JSON structure with required field (`bbox_2d`)
+4. **2D Bbox IoU Reward** (2.0): 2D bounding box overlap on peak slice (easier to learn than 3D)
+   - IoU ≥ 0.7: 0.79+ point (high overlap)
    - IoU ≥ 0.3: 0.51 point (partial overlap)
    - Valid box: 0.1 point (baseline)
-5. **Peak Slice Reward** (0.5): Accuracy of peak tumor slice identification
-   - Error ≤ 3 slices: 1.0 point (before weight)
-   - Error ≤ 5 slices: 0.7 point
-   - Error ≤ 10 slices: 0.3 point
-6. **Start Slice Reward** (0.5): Accuracy of tumor start slice
-   - Error ≤ 3 slices: 1.0 point (before weight)
-   - Error ≤ 5 slices: 0.7 point
-   - Error ≤ 10 slices: 0.3 point
-7. **End Slice Reward** (0.5): Accuracy of tumor end slice
-   - Error ≤ 3 slices: 1.0 point (before weight)
-   - Error ≤ 5 slices: 0.7 point
-   - Error ≤ 10 slices: 0.3 point
-8. **Tumor Ratio Reward** (0.5): Volume estimation accuracy
-   - Relative error ≤ 10%: 1.0 point (before weight)
-   - Relative error ≤ 20%: 0.7 point
-   - Relative error ≤ 30%: 0.3 point
 
 **Gate Mechanism**: If Video Keyword Reward = 0 (no "This video shows"), then all medical measurement rewards are set to 0.
 
-**Note**: Switched from 3D bbox (6 coords) to 2D bbox (4 coords) + slice range to improve learnability. 2D bbox aligns better with VLM pretraining tasks.
+**Note**: Focused on 2D bbox only to simplify the task and improve learnability. 2D bbox aligns well with VLM pretraining tasks.
 
 See implementation: [`verl/utils/reward_score/brain_tumor_3d.py`](verl/utils/reward_score/brain_tumor_3d.py)
 

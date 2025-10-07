@@ -97,7 +97,7 @@ def brain_tumor_3d_video_keyword_reward(predict_str: str) -> float:
 def brain_tumor_3d_format_reward(predict_str: str) -> float:
     """
     检查输出格式是否符合要求 (1.0分)
-    要求包含有效的JSON格式，包含bbox_2d, peak_slice, start_slice, end_slice, tumor_ratio字段
+    要求包含有效的JSON格式，包含bbox_2d字段
     优先从<answer>标签内提取JSON，如果没有标签则降级到全文搜索
     """
     try:
@@ -117,7 +117,7 @@ def brain_tumor_3d_format_reward(predict_str: str) -> float:
             return 0.0
 
         # 检查必需字段
-        required_fields = ['bbox_2d', 'peak_slice', 'start_slice', 'end_slice', 'tumor_ratio']
+        required_fields = ['bbox_2d']
         for item in json_data:
             if not all(field in item for field in required_fields):
                 return 0.0
@@ -125,16 +125,6 @@ def brain_tumor_3d_format_reward(predict_str: str) -> float:
             # 检查bbox_2d格式 (4个值: x1, y1, x2, y2)
             bbox = item['bbox_2d']
             if not isinstance(bbox, list) or len(bbox) != 4:
-                return 0.0
-
-            # 检查数值类型
-            if not isinstance(item['peak_slice'], (int, float)):
-                return 0.0
-            if not isinstance(item['start_slice'], (int, float)):
-                return 0.0
-            if not isinstance(item['end_slice'], (int, float)):
-                return 0.0
-            if not isinstance(item['tumor_ratio'], (int, float)):
                 return 0.0
 
         return 1.0
@@ -222,170 +212,6 @@ def brain_tumor_2d_bbox_iou_reward(predict_str: str, ground_truth: str) -> float
         return 0.0
 
 
-def brain_tumor_3d_peak_slice_reward(predict_str: str, ground_truth: str) -> float:
-    """
-    峰值切片准确性奖励 (最高1.0分)
-    误差 ≤3: 1.0分, ≤5: 0.7分, ≤10: 0.3分, >10: 0.0分
-    """
-    try:
-        # 解析ground truth
-        gt_data = json.loads(ground_truth)
-        gt_slice = gt_data[0]['peak_slice']
-
-        # 优先从<answer>标签内提取JSON
-        answer_pattern = r'<answer>(.*?)</answer>'
-        answer_match = re.search(answer_pattern, predict_str, re.DOTALL | re.IGNORECASE)
-        json_text = answer_match.group(1) if answer_match else predict_str
-
-        # 解析预测结果
-        pred_data = extract_json_from_text(json_text)
-        if not pred_data:
-            return 0.0
-
-        pred_slice = pred_data[0]['peak_slice']
-
-        # 计算误差
-        error = abs(pred_slice - gt_slice)
-
-        # 分级奖励
-        if error <= 3:
-            return 1.0
-        elif error <= 5:
-            return 0.7
-        elif error <= 10:
-            return 0.3
-        else:
-            return 0.0
-
-    except Exception:
-        return 0.0
-
-
-def brain_tumor_start_slice_reward(predict_str: str, ground_truth: str) -> float:
-    """
-    起始切片准确性奖励 (最高1.0分)
-    从bbox_3d的z坐标提取start_slice (min(z1, z2))
-    误差 ≤3: 1.0分, ≤5: 0.7分, ≤10: 0.3分, >10: 0.0分
-    """
-    try:
-        # 解析ground truth，从bbox_3d提取start_slice
-        gt_data = json.loads(ground_truth)
-        gt_bbox_3d = gt_data[0]['bbox_3d']
-        gt_start_slice = min(gt_bbox_3d[2], gt_bbox_3d[5])  # min(z1, z2)
-
-        # 优先从<answer>标签内提取JSON
-        answer_pattern = r'<answer>(.*?)</answer>'
-        answer_match = re.search(answer_pattern, predict_str, re.DOTALL | re.IGNORECASE)
-        json_text = answer_match.group(1) if answer_match else predict_str
-
-        # 解析预测结果
-        pred_data = extract_json_from_text(json_text)
-        if not pred_data:
-            return 0.0
-
-        pred_start_slice = pred_data[0]['start_slice']
-
-        # 计算误差
-        error = abs(pred_start_slice - gt_start_slice)
-
-        # 分级奖励
-        if error <= 3:
-            return 1.0
-        elif error <= 5:
-            return 0.7
-        elif error <= 10:
-            return 0.3
-        else:
-            return 0.0
-
-    except Exception:
-        return 0.0
-
-
-def brain_tumor_end_slice_reward(predict_str: str, ground_truth: str) -> float:
-    """
-    结束切片准确性奖励 (最高1.0分)
-    从bbox_3d的z坐标提取end_slice (max(z1, z2))
-    误差 ≤3: 1.0分, ≤5: 0.7分, ≤10: 0.3分, >10: 0.0分
-    """
-    try:
-        # 解析ground truth，从bbox_3d提取end_slice
-        gt_data = json.loads(ground_truth)
-        gt_bbox_3d = gt_data[0]['bbox_3d']
-        gt_end_slice = max(gt_bbox_3d[2], gt_bbox_3d[5])  # max(z1, z2)
-
-        # 优先从<answer>标签内提取JSON
-        answer_pattern = r'<answer>(.*?)</answer>'
-        answer_match = re.search(answer_pattern, predict_str, re.DOTALL | re.IGNORECASE)
-        json_text = answer_match.group(1) if answer_match else predict_str
-
-        # 解析预测结果
-        pred_data = extract_json_from_text(json_text)
-        if not pred_data:
-            return 0.0
-
-        pred_end_slice = pred_data[0]['end_slice']
-
-        # 计算误差
-        error = abs(pred_end_slice - gt_end_slice)
-
-        # 分级奖励
-        if error <= 3:
-            return 1.0
-        elif error <= 5:
-            return 0.7
-        elif error <= 10:
-            return 0.3
-        else:
-            return 0.0
-
-    except Exception:
-        return 0.0
-
-
-def brain_tumor_3d_ratio_reward(predict_str: str, ground_truth: str) -> float:
-    """
-    肿瘤比例准确性奖励 (最高1.0分)
-    相对误差 ≤10%: 1.0分, ≤20%: 0.7分, ≤30%: 0.3分, >30%: 0.0分
-    """
-    try:
-        # 解析ground truth
-        gt_data = json.loads(ground_truth)
-        gt_ratio = gt_data[0]['tumor_ratio']
-
-        # 优先从<answer>标签内提取JSON
-        answer_pattern = r'<answer>(.*?)</answer>'
-        answer_match = re.search(answer_pattern, predict_str, re.DOTALL | re.IGNORECASE)
-        json_text = answer_match.group(1) if answer_match else predict_str
-
-        # 解析预测结果
-        pred_data = extract_json_from_text(json_text)
-        if not pred_data:
-            return 0.0
-
-        pred_ratio = pred_data[0]['tumor_ratio']
-
-        # 处理特殊情况：ground truth为0
-        if gt_ratio == 0:
-            return 1.0 if pred_ratio == 0 else 0.0
-
-        # 计算相对误差
-        relative_error = abs(pred_ratio - gt_ratio) / gt_ratio
-
-        # 分级奖励
-        if relative_error <= 0.1:  # 10%
-            return 1.0
-        elif relative_error <= 0.2:  # 20%
-            return 0.7
-        elif relative_error <= 0.3:  # 30%
-            return 0.3
-        else:
-            return 0.0
-
-    except Exception:
-        return 0.0
-
-
 def brain_tumor_3d_non_repeat_reward(predict_str: str) -> float:
     """
     防重复奖励 (返回0-1标准化分数，外部乘权重)
@@ -422,10 +248,6 @@ REWARD_WEIGHTS = {
     'video_keyword': 0.5,    # 视频分析门槛
     'format': 0.5,           # JSON格式验证
     'bbox_2d_iou': 2.0,      # 2D边界框IoU (peak slice上的2D框) - 增加权重强化学习
-    'peak_slice': 1.0,       # 峰值切片准确性 - 增加权重
-    'start_slice': 1.0,      # 起始切片准确性 - 增加权重
-    'end_slice': 1.0,        # 结束切片准确性 - 增加权重
-    'tumor_ratio': 1.0,      # 肿瘤比例准确性 - 增加权重
     # non_repeat removed - should be handled during sampling, not as reward
 }
 
@@ -437,25 +259,17 @@ def get_reward_weights():
 
 def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_details: bool = False, response_token_length: int = None):
     """
-    3D脑肿瘤检测总奖励函数 (最高7.5分) - 2D bbox + slice range版本
+    3D脑肿瘤检测总奖励函数 (最高3.5分) - 仅2D bbox版本
 
     组成（强化医学任务权重 + 严格门控）：
     - 思维格式奖励: 0.5分 (必须有50+字符且非JSON的推理内容)
     - 视频关键词奖励: 0.5分 (必须以"This video shows"开头)
-    - 格式奖励: 0.5分 (JSON格式验证: bbox_2d, peak_slice, start_slice, end_slice, tumor_ratio)
+    - 格式奖励: 0.5分 (JSON格式验证: bbox_2d)
     - 2D bbox IoU奖励: 2.0分 (peak slice上的2D框) - 强化学习
-    - 峰值切片奖励: 1.0分 (肿瘤最大的切片索引) - 强化学习
-    - 起始切片奖励: 1.0分 (肿瘤起始的切片索引) - 强化学习
-    - 结束切片奖励: 1.0分 (肿瘤结束的切片索引) - 强化学习
-    - 肿瘤比例奖励: 1.0分 (体积比例) - 强化学习
 
     **输出格式**：
     {
-      "bbox_2d": [x1, y1, x2, y2],  // peak slice上的2D框
-      "peak_slice": 74,              // 肿瘤最大的切片
-      "start_slice": 55,             // 肿瘤起始切片
-      "end_slice": 95,               // 肿瘤结束切片
-      "tumor_ratio": 0.022           // 体积比例
+      "bbox_2d": [x1, y1, x2, y2]  // peak slice上的2D框
     }
 
     **放宽版渐进式门控机制（Relaxed Progressive Gate Policy）**：
@@ -472,7 +286,7 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
 
     Args:
         predict_str: 模型预测字符串
-        ground_truth: Ground truth JSON字符串 (包含bbox_3d, peak_slice, tumor_ratio)
+        ground_truth: Ground truth JSON字符串 (包含bbox_3d)
         return_details: 如果为True，返回(total_score, details_dict)，否则只返回total_score
         response_token_length: 可选，response的token数量（用于检测max_length）
 
@@ -487,8 +301,7 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
             return 0.0, {
                 'length_exceeded': True,
                 'thinking_format': 0.0, 'video_keyword': 0.0, 'format': 0.0,
-                'bbox_2d_iou': 0.0, 'peak_slice': 0.0, 'start_slice': 0.0,
-                'end_slice': 0.0, 'tumor_ratio': 0.0, 'total': 0.0
+                'bbox_2d_iou': 0.0, 'total': 0.0
             }
         return 0.0
 
@@ -527,12 +340,8 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
             medical_gate = 0.5
 
     bbox_2d_iou_reward = brain_tumor_2d_bbox_iou_reward(predict_str, ground_truth) * REWARD_WEIGHTS['bbox_2d_iou'] * medical_gate
-    peak_slice_reward = brain_tumor_3d_peak_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['peak_slice'] * medical_gate
-    start_slice_reward = brain_tumor_start_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['start_slice'] * medical_gate
-    end_slice_reward = brain_tumor_end_slice_reward(predict_str, ground_truth) * REWARD_WEIGHTS['end_slice'] * medical_gate
-    ratio_reward = brain_tumor_3d_ratio_reward(predict_str, ground_truth) * REWARD_WEIGHTS['tumor_ratio'] * medical_gate
 
-    total_reward = thinking_format_reward + video_keyword_reward + format_reward + bbox_2d_iou_reward + peak_slice_reward + start_slice_reward + end_slice_reward + ratio_reward
+    total_reward = thinking_format_reward + video_keyword_reward + format_reward + bbox_2d_iou_reward
 
     if return_details:
         details = {
@@ -540,10 +349,6 @@ def brain_tumor_3d_compute_score(predict_str: str, ground_truth: str, return_det
             'video_keyword': video_keyword_reward,
             'format': format_reward,
             'bbox_2d_iou': bbox_2d_iou_reward,
-            'peak_slice': peak_slice_reward,
-            'start_slice': start_slice_reward,
-            'end_slice': end_slice_reward,
-            'tumor_ratio': ratio_reward,
             'total': total_reward
         }
         return total_reward, details
@@ -683,12 +488,12 @@ def compute_3d_iou(box1, box2):
 
 
 if __name__ == "__main__":
-    # 测试代码 - 新格式: 2D bbox + slice range
-    predict_str = """<think>This video shows an MRI sequence where tumor is located in right hemisphere, spanning slices 102-150</think><answer>[{"bbox_2d": [91, 33, 131, 84], "peak_slice": 124, "start_slice": 102, "end_slice": 150, "tumor_ratio": 0.022}]</answer>"""
-    ground_truth = """[{"bbox_3d": [91, 33, 102, 131, 84, 150], "peak_slice": 124, "tumor_ratio": 0.021957}]"""
+    # 测试代码 - 新格式: 仅2D bbox
+    predict_str = """<think>This video shows an MRI sequence where tumor is located in right hemisphere</think><answer>[{"bbox_2d": [91, 33, 131, 84]}]</answer>"""
+    ground_truth = """[{"bbox_3d": [91, 33, 102, 131, 84, 150]}]"""
 
     score, details = brain_tumor_3d_compute_score(predict_str, ground_truth, return_details=True)
-    print(f"Total score: {score}/4.5")
+    print(f"Total score: {score}/3.5")
 
     # 测试各个组件
     print(f"\nDetailed breakdown:")
@@ -696,7 +501,3 @@ if __name__ == "__main__":
     print(f"Video keyword reward: {brain_tumor_3d_video_keyword_reward(predict_str)}")
     print(f"Format reward: {brain_tumor_3d_format_reward(predict_str)}")
     print(f"2D bbox IoU reward: {brain_tumor_2d_bbox_iou_reward(predict_str, ground_truth)}")
-    print(f"Peak slice reward: {brain_tumor_3d_peak_slice_reward(predict_str, ground_truth)}")
-    print(f"Start slice reward: {brain_tumor_start_slice_reward(predict_str, ground_truth)}")
-    print(f"End slice reward: {brain_tumor_end_slice_reward(predict_str, ground_truth)}")
-    print(f"Ratio reward: {brain_tumor_3d_ratio_reward(predict_str, ground_truth)}")

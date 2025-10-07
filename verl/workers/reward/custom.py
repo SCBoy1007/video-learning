@@ -61,11 +61,7 @@ class CustomRewardManager:
                 'thinking_format': [],
                 'video_keyword': [],
                 'format': [],
-                'bbox_2d_iou': [],
-                'peak_slice': [],
-                'start_slice': [],
-                'end_slice': [],
-                'tumor_ratio': []
+                'bbox_2d_iou': []
             }
 
         for i in range(len(data)):
@@ -131,18 +127,13 @@ class CustomRewardManager:
                         # Fallback to default if import fails
                         weights = {
                             'thinking_format': 0.5, 'video_keyword': 0.5, 'format': 0.5,
-                            'bbox_2d_iou': 2.0, 'peak_slice': 1.0, 'start_slice': 1.0,
-                            'end_slice': 1.0, 'tumor_ratio': 1.0
+                            'bbox_2d_iou': 2.0
                         }
 
                     print(f"  └─ thinking_format: {details['thinking_format']:.2f}/{weights['thinking_format']:.1f} | "
                           f"video_keyword: {details['video_keyword']:.2f}/{weights['video_keyword']:.1f} | "
                           f"format: {details['format']:.2f}/{weights['format']:.1f} | "
                           f"bbox_2d_iou: {details['bbox_2d_iou']:.2f}/{weights['bbox_2d_iou']:.1f}")
-                    print(f"  └─ peak: {details['peak_slice']:.2f}/{weights['peak_slice']:.1f} | "
-                          f"start: {details['start_slice']:.2f}/{weights['start_slice']:.1f} | "
-                          f"end: {details['end_slice']:.2f}/{weights['end_slice']:.1f} | "
-                          f"ratio: {details['tumor_ratio']:.2f}/{weights['tumor_ratio']:.1f}")
             else:
                 # Print only score for remaining samples
                 print(f"[score {i+1}] {score:.3f}")

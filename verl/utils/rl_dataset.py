@@ -159,17 +159,17 @@ class RLHFDataset(Dataset):
             # Video prompt for brain tumor detection (aligned with Seg-Zero style)
             self.user_prompt = "<video>\n" \
                 "Please identify and localize \"{Question}\" in this MRI video sequence.\n" \
-                "Analyze the video frames to determine tumor boundaries, peak location, and volume.\n" \
+                "Analyze the video frames to determine the tumor's 2D bounding box on the frame where it appears largest.\n" \
                 "Output the thinking process in <think> </think> and final answer in <answer> </answer> tags.\n" \
                 "\n" \
                 "In your <think> section, start with 'This video shows' and provide structured analysis:\n" \
                 "1. Tumor appearance: Describe visual characteristics across video frames (shape, intensity, texture)\n" \
-                "2. Location analysis: Identify brain region and spatial extent based on observed slices\n" \
-                "3. Measurement reasoning: Explain how you estimate boundaries, peak slice, and volume\n" \
+                "2. Location analysis: Identify brain region and which frame shows the largest tumor extent\n" \
+                "3. Measurement reasoning: Explain how you estimate the bounding box boundaries on that frame\n" \
                 "Provide concrete observations from the video, not generic descriptions.\n" \
                 "\n" \
-                "Output format: <answer>[{{\"bbox_2d\": [x_min, y_min, x_max, y_max], \"peak_slice\": <int>, \"start_slice\": <int>, \"end_slice\": <int>, \"tumor_ratio\": <float>}}]</answer>\n" \
-                "Note: bbox_2d is the 2D bounding box on the peak_slice frame. start_slice and end_slice define the slice range where tumor appears."
+                "Output format: <answer>[{{\"bbox_2d\": [x_min, y_min, x_max, y_max]}}]</answer>\n" \
+                "Note: bbox_2d is the 2D bounding box coordinates on the frame where the tumor appears largest."
         else:
             # Original image prompt
             self.user_prompt = "<image>\n" \

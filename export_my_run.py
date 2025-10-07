@@ -45,9 +45,6 @@ def export_run():
             'actor/pg_clipfrac',
             'actor/ppo_kl',
             'reward/bbox_2d_iou/mean',
-            'reward/peak_slice/mean',
-            'reward/start_slice/mean',
-            'reward/end_slice/mean',
             'reward/total/mean'
         ]
 

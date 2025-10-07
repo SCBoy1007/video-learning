@@ -77,9 +77,7 @@ REWARD_WEIGHTS = {
     'thinking_format': 0.5,
     'video_keyword': 0.5,
     'format': 0.5,
-    'iou': 1.0,           # Core task (reduced to stabilize training)
-    'peak_slice': 1.0,    # Reduced to stabilize training
-    'tumor_ratio': 1.0,   # Reduced to stabilize training
+    'bbox_2d_iou': 2.0,   # Core task - 2D bounding box IoU
 }
 ```
 
@@ -185,10 +183,8 @@ worker.rollout.enable_chunked_prefill: false
 thinking_format: 0.5
 video_keyword: 0.5
 format: 0.5
-iou: 1.0
-peak_slice: 1.0
-tumor_ratio: 1.0
-# Total: 4.5 points
+bbox_2d_iou: 2.0
+# Total: 3.5 points
 ```
 
 ---
