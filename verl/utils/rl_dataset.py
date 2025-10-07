@@ -105,11 +105,14 @@ class RLHFDataset(Dataset):
 
         # Set user prompt after loading dataset
         self.user_prompt = "<image>\n" \
-            "Please find \"{Question}\" with bbox and point." \
-            "Analyze the image carefully to locate the target object." \
-            "Output the thinking process in <think> </think> and final answer in <answer> </answer> tags." \
-            "Output the bbox and point inside the interested object in JSON format." \
-            "i.e., <think> thinking process here </think>" \
+            "Task: {Question}\n\n" \
+            "Instructions:\n" \
+            "1. This is a brain MRI scan. Look for abnormal regions that appear different from normal brain tissue.\n" \
+            "2. Brain tumors typically appear as areas with altered intensity (brighter or darker regions) or irregular shapes.\n" \
+            "3. Locate the tumor region and determine its 2D bounding box [x_min, y_min, x_max, y_max] and center point [x, y].\n" \
+            "4. Output your analysis in <think></think> tags, then provide the final answer in <answer></answer> tags.\n\n" \
+            "Output format example:\n" \
+            "<think>Analysis of the image shows...</think>\n" \
             "<answer>{Answer}</answer>"
 
     def _load_single_dataset(self, data_path: str):
