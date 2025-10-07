@@ -47,11 +47,15 @@ class CustomRewardManager:
         reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
         already_print = 0
 
-        # Initialize metric accumulators for detailed tracking
+        # Initialize metric accumulators for detailed tracking (7 metrics)
         if self.supports_details:
             metric_accumulators = {
-                'format': [],
-                'accuracy': [],
+                'thinking_tag': [],
+                'json_parseable': [],
+                'bbox_format': [],
+                'point_format': [],
+                'bbox_iou': [],
+                'point_distance': [],
                 'non_repeat': []
             }
 
@@ -95,9 +99,10 @@ class CustomRewardManager:
 
                 # Print sub-metric breakdown if available
                 if self.supports_details:
-                    print(f"  └─ format: {details['format']:.2f}/2.0 | "
-                          f"accuracy: {details['accuracy']:.2f}/3.0 | "
-                          f"non_repeat: {details['non_repeat']:.2f}/1.0")
+                    print(f"  └─ Format: think={details['thinking_tag']:.1f} json={details['json_parseable']:.1f} "
+                          f"bbox_fmt={details['bbox_format']:.1f} point_fmt={details['point_format']:.1f}")
+                    print(f"     Accuracy: IoU={details['bbox_iou']:.3f} point_dist={details['point_distance']:.1f} "
+                          f"non_repeat={details['non_repeat']:.1f}")
 
         # Store aggregated metrics in data for later logging
         if self.supports_details:

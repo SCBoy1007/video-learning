@@ -126,21 +126,22 @@ def vision_reasoner_non_repeat_reward(predict_str: str) -> float:
 
 def vision_reasoner_compute_score(predict_str: str, ground_truth: str, return_details: bool = False):
     """
-    Compute vision reasoner reward score
+    Compute vision reasoner reward score (UNCHANGED LOGIC)
 
-    Components (max 5.0):
-    - format_reward: 2.0 (thinking + answer tags with valid JSON)
-    - accuracy_reward: 3.0 (bbox/point accuracy via Hungarian matching)
+    Components (max ~6.0):
+    - format_reward: ~3.0 (thinking 1.0 + segmentation format ~2.0)
+    - accuracy_reward: ~3.0 (bbox/point accuracy via Hungarian matching)
     - non_repeat_reward: 1.0 (penalize repetitive text)
 
     Args:
         predict_str: Model prediction string
         ground_truth: Ground truth JSON string
-        return_details: If True, return (score, details_dict); else return score only
+        return_details: If True, return (score, detailed_dict); else return score only
 
     Returns:
-        float or (float, dict): Total score or (total_score, component_breakdown)
+        float or (float, dict): Total score or (total_score, detailed_breakdown with 7 metrics)
     """
+    # Original reward calculations (UNCHANGED)
     format_reward = vision_reasoner_format_reward(predict_str)
     accuracy_reward = vision_reasoner_accuracy_reward(predict_str, ground_truth)
     non_repeat_reward = vision_reasoner_non_repeat_reward(predict_str)
@@ -148,11 +149,61 @@ def vision_reasoner_compute_score(predict_str: str, ground_truth: str, return_de
     total_reward = format_reward + accuracy_reward + non_repeat_reward
 
     if return_details:
-        details = {
-            'format': format_reward,
-            'accuracy': accuracy_reward,
-            'non_repeat': non_repeat_reward
-        }
+        # Extract detailed breakdown for wandb monitoring
+        details = {}
+
+        # 1. Thinking tag (0 or 1.0)
+        pattern = r"<think>.*?</think>\s*<answer>.*?</answer>"
+        match = re.fullmatch(pattern, predict_str, re.DOTALL)
+        details['thinking_tag'] = 1.0 if match else 0.0
+
+        # 2-4. JSON format components
+        details['json_parseable'] = 0.0
+        details['bbox_format'] = 0.0
+        details['point_format'] = 0.0
+
+        try:
+            json_match = re.search(r'<answer>\s*(.*?)\s*</answer>', predict_str, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group(1))
+                details['json_parseable'] = 1.0
+
+                if isinstance(data, list) and len(data) > 0:
+                    # Check first item
+                    item = data[0]
+                    if 'bbox_2d' in item and isinstance(item['bbox_2d'], list) and len(item['bbox_2d']) == 4:
+                        details['bbox_format'] = 1.0
+                    if 'point_2d' in item and isinstance(item['point_2d'], list) and len(item['point_2d']) == 2:
+                        details['point_format'] = 1.0
+        except:
+            pass
+
+        # 5-6. Accuracy components (extract from accuracy_reward calculation)
+        details['bbox_iou'] = 0.0
+        details['point_distance'] = 0.0
+
+        try:
+            gt_data = json.loads(ground_truth)
+            json_match = re.search(r'<answer>\s*(.*?)\s*</answer>', predict_str, re.DOTALL)
+            if json_match:
+                pred_data = json.loads(json_match.group(1))
+                if pred_data and gt_data:
+                    pred_bbox = np.array([pred_data[0]['bbox_2d']])
+                    gt_bbox = np.array([gt_data[0]['bbox_2d']])
+                    pred_point = np.array([pred_data[0]['point_2d']])
+                    gt_point = np.array([gt_data[0]['point_2d']])
+
+                    iou = batch_iou(pred_bbox, gt_bbox)[0,0]
+                    details['bbox_iou'] = float(iou)
+
+                    dist = batch_points_distance(pred_point, gt_point)[0,0]
+                    details['point_distance'] = float(dist)
+        except:
+            pass
+
+        # 7. Non-repeat (0 or 1.0)
+        details['non_repeat'] = non_repeat_reward
+
         return total_reward, details
     else:
         return total_reward
