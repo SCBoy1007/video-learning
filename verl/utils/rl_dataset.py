@@ -105,10 +105,10 @@ class RLHFDataset(Dataset):
 
         # Set user prompt after loading dataset
         self.user_prompt = "<image>\n" \
-            "Please find \"{Question}\" with bboxs and points." \
-            "Compare the difference between object(s) and find the most closely matched object(s)." \
+            "Please find \"{Question}\" with bbox and point." \
+            "Analyze the image carefully to locate the target object." \
             "Output the thinking process in <think> </think> and final answer in <answer> </answer> tags." \
-            "Output the bbox(es) and point(s) inside the interested object(s) in JSON format." \
+            "Output the bbox and point inside the interested object in JSON format." \
             "i.e., <think> thinking process here </think>" \
             "<answer>{Answer}</answer>"
 
@@ -159,7 +159,7 @@ class RLHFDataset(Dataset):
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": self.user_prompt.format(
                 Question=row_dict["problem"].lower().strip("."),
-                Answer="[{\"bbox_2d\": [10,100,200,210], \"point_2d\": [30,110]}, {\"bbox_2d\": [225,296,706,786], \"point_2d\": [302,410]}]"
+                Answer="[{\"bbox_2d\": [10,100,200,210], \"point_2d\": [120,155]}]"
             )},
         ]
         prompt = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
