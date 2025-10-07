@@ -5,7 +5,7 @@ data:
   prompt_key: problem
   max_prompt_length: 1300  # Standard image prompt length
   max_response_length: 2000
-  rollout_batch_size: 16
+  rollout_batch_size: 32  # Double batch size for faster training
   shuffle: true
   seed: 42
   max_pixels: 12845056  # 280×280 images fit comfortably
@@ -17,9 +17,9 @@ algorithm:
 
 worker:
   actor:
-    global_batch_size: 16
-    micro_batch_size_per_device_for_update: 2  # Conservative for 4×A100-80G
-    micro_batch_size_per_device_for_experience: 2
+    global_batch_size: 32  # Double batch size for faster training
+    micro_batch_size_per_device_for_update: 4  # Increase per-device batch
+    micro_batch_size_per_device_for_experience: 4
     max_grad_norm: 1.0
     use_kl_loss: true
     kl_loss_coef: 5.0e-3
