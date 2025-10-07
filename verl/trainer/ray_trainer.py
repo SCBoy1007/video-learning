@@ -16,6 +16,7 @@ FSDP PPO Trainer with Ray-based single controller.
 This trainer supports model-agonistic model initialization with huggingface
 """
 
+import gc
 import os
 import uuid
 from contextlib import contextmanager
@@ -814,6 +815,12 @@ class RayPPOTrainer:
 
                 # TODO: make a canonical logger that supports various backend
                 logger.log(data=metrics, step=self.global_steps)
+
+                # Force CUDA memory cleanup to prevent OOM from memory fragmentation
+                # Especially important after step 3+ when memory fragmentation accumulates
+                gc.collect()
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
 
         # perform validation after training
         if self.val_reward_fn is not None:
