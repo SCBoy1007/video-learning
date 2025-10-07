@@ -63,3 +63,4 @@ trainer:
   test_freq: 100  # Validate every 100 steps
   val_before_train: true
   val_only: false
+  remove_previous_ckpt: false  # Keep all checkpoints (set true to save space)
