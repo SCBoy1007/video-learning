@@ -124,14 +124,38 @@ def vision_reasoner_non_repeat_reward(predict_str: str) -> float:
     
     return non_repeat_reward
 
-def vision_reasoner_compute_score(predict_str: str, ground_truth: str) -> float:
-    # print(predict_str, ground_truth)
+def vision_reasoner_compute_score(predict_str: str, ground_truth: str, return_details: bool = False):
+    """
+    Compute vision reasoner reward score
+
+    Components (max 5.0):
+    - format_reward: 2.0 (thinking + answer tags with valid JSON)
+    - accuracy_reward: 3.0 (bbox/point accuracy via Hungarian matching)
+    - non_repeat_reward: 1.0 (penalize repetitive text)
+
+    Args:
+        predict_str: Model prediction string
+        ground_truth: Ground truth JSON string
+        return_details: If True, return (score, details_dict); else return score only
+
+    Returns:
+        float or (float, dict): Total score or (total_score, component_breakdown)
+    """
     format_reward = vision_reasoner_format_reward(predict_str)
     accuracy_reward = vision_reasoner_accuracy_reward(predict_str, ground_truth)
     non_repeat_reward = vision_reasoner_non_repeat_reward(predict_str)
-    
-    reward = format_reward + accuracy_reward + non_repeat_reward
-    return reward
+
+    total_reward = format_reward + accuracy_reward + non_repeat_reward
+
+    if return_details:
+        details = {
+            'format': format_reward,
+            'accuracy': accuracy_reward,
+            'non_repeat': non_repeat_reward
+        }
+        return total_reward, details
+    else:
+        return total_reward
 
 def batch_iou(boxes1, boxes2):
     # boxes1: (M,4), boxes2: (N,4)
