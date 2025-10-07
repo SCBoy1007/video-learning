@@ -103,6 +103,15 @@ class RLHFDataset(Dataset):
             # Single dataset (original logic)
             self.dataset = self._load_single_dataset(data_path)
 
+        # Set user prompt after loading dataset
+        self.user_prompt = "<image>\n" \
+            "Please find \"{Question}\" with bboxs and points." \
+            "Compare the difference between object(s) and find the most closely matched object(s)." \
+            "Output the thinking process in <think> </think> and final answer in <answer> </answer> tags." \
+            "Output the bbox(es) and point(s) inside the interested object(s) in JSON format." \
+            "i.e., <think> thinking process here </think>" \
+            "<answer>{Answer}</answer>"
+
     def _load_single_dataset(self, data_path: str):
         """
         Load a single dataset, handling both DatasetDict and direct Dataset formats
@@ -128,24 +137,6 @@ class RLHFDataset(Dataset):
                     f"Tried both DatasetDict format (error: {e1}) "
                     f"and Dataset format at {train_path} (error: {e2})"
                 )
-        
-        ################ Old Version ################
-        # self.user_prompt = "<image>" \
-        #     "Please find '{Question}' with bbox and points." \
-        #     "Compare the difference between objects and find the most closely matched one." \
-        #     "Output the thinking process in <think> </think> and final answer in <answer> </answer> tags." \
-        #     "Output the one bbox and points of two largest inscribed circles inside the interested object in JSON format." \
-        #     "i.e., <think> thinking process here </think>" \
-        #     "<answer>{Answer}</answer>"
-        ################ Old Version ################
-        
-        self.user_prompt = "<image>\n" \
-            "Please find \"{Question}\" with bboxs and points." \
-            "Compare the difference between object(s) and find the most closely matched object(s)." \
-            "Output the thinking process in <think> </think> and final answer in <answer> </answer> tags." \
-            "Output the bbox(es) and point(s) inside the interested object(s) in JSON format." \
-            "i.e., <think> thinking process here </think>" \
-            "<answer>{Answer}</answer>"
 
     def __len__(self):
         return len(self.dataset)
