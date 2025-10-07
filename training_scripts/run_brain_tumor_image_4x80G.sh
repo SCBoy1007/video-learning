@@ -18,16 +18,14 @@ MODEL_PATH=pretrained_models/Qwen2.5-VL-7B-Instruct
 
 RUN_NAME=$(basename "$0" .sh)
 
-# Training datasets: 5 image datasets
+# Training datasets: 4 image datasets
 # - BraTS GLI Main: T1C (1350 samples) + T2F (1350 samples)
 # - MSD Brain Tumor: T1Gd (484 samples) + FLAIR (484 samples)
-# - MEN-RT: T1C (500 samples)
-# Total: ~4,168 training samples
+# Total: ~3,668 training samples (removed MEN-RT)
 TRAIN_DATA="data/BraTS_GLI_Main_Image_280/T1C,\
 data/BraTS_GLI_Main_Image_280/T2F,\
 data/MSD_BrainTumour_Image_280/T1Gd,\
-data/MSD_BrainTumour_Image_280/FLAIR,\
-data/BraTS_MEN_RT_Image_280/T1C"
+data/MSD_BrainTumour_Image_280/FLAIR"
 
 # Validation datasets: 2 GLI Additional image datasets
 # - BraTS GLI Additional: T1C (273 samples) + T2F (273 samples)
