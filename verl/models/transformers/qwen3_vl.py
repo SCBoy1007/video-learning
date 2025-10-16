@@ -44,6 +44,17 @@ def get_rope_index(
 
     mrope_position_deltas = []
 
+    # ==================== FIX: Support both 1D and 2D input_ids ====================
+    # RLHFDataset returns 1D tensors (seqlen,) from tokenize_and_postprocess_data
+    # We need to expand to 2D (batch, seqlen) for compatibility, then squeeze back
+    # =============================================================================
+    input_ids_was_1d = False
+    if input_ids is not None and input_ids.dim() == 1:
+        input_ids_was_1d = True
+        input_ids = input_ids.unsqueeze(0)  # (seqlen,) -> (1, seqlen)
+        if attention_mask is not None:
+            attention_mask = attention_mask.unsqueeze(0)  # (seqlen,) -> (1, seqlen)
+
     if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
         total_input_ids = input_ids
         if attention_mask is None:
@@ -129,6 +140,12 @@ def get_rope_index(
             mrope_position_deltas.append(llm_positions.max() + 1 - len(total_input_ids[i]))
 
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
+
+        # Restore original dimension if input was 1D
+        if input_ids_was_1d:
+            position_ids = position_ids.squeeze(1)  # (3, 1, seqlen) -> (3, seqlen)
+            mrope_position_deltas = mrope_position_deltas.squeeze(0)  # (1, 1) -> (1,)
+
         return position_ids, mrope_position_deltas
     else:
         if attention_mask is not None:
@@ -148,5 +165,10 @@ def get_rope_index(
                 device=input_ids.device,
                 dtype=input_ids.dtype,
             )
+
+        # Restore original dimension if input was 1D
+        if input_ids_was_1d:
+            position_ids = position_ids.squeeze(1)  # (3, 1, seqlen) -> (3, seqlen)
+            mrope_position_deltas = mrope_position_deltas.squeeze(0)  # (1, 1) -> (1,)
 
         return position_ids, mrope_position_deltas
