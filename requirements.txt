@@ -15,8 +15,8 @@ qwen-vl-utils==0.0.14  # Required for Qwen3-VL
 scipy
 matplotlib
 ipykernel
-sam2
-pycocotools
+# sam2  # Only needed for segmentation evaluation (bbox/point → mask), not for existence detection training
+# pycocotools  # Only needed for segmentation evaluation, not for existence detection training
 scikit-image
 ray
 tensordict
