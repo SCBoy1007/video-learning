@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
@@ -11,7 +11,7 @@ def get_rope_index(
     video_grid_thw: Optional[torch.Tensor] = None,
     second_per_grid_ts: Optional[torch.Tensor] = None,
     attention_mask: Optional[torch.Tensor] = None,
-) -> torch.Tensor:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Gets the position ids for Qwen2-VL, it should be generated before sharding the sequence.
     The batch dim has been removed and the input_ids should be a 1D tensor representing a single example.
@@ -104,4 +104,7 @@ def get_rope_index(
         else:
             position_ids = torch.arange(input_ids.shape[1], device=input_ids.device).view(1, -1).expand(3, -1)
 
-    return position_ids
+    # For consistency with Qwen3-VL, return tuple (position_ids, mrope_deltas)
+    # Qwen2.5-VL doesn't use mrope_deltas, so return None
+    mrope_position_deltas = None
+    return position_ids, mrope_position_deltas

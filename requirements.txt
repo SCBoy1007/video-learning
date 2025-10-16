@@ -11,7 +11,7 @@ peft
 pillow
 pyarrow>=15.0.0
 pylatexenc
-qwen-vl-utils
+qwen-vl-utils==0.0.14  # Required for Qwen3-VL
 scipy
 matplotlib
 ipykernel
@@ -20,6 +20,7 @@ pycocotools
 scikit-image
 ray
 tensordict
-transformers==4.51.3
-vllm==0.8.5.post1
+# Updated for Qwen3-VL-8B support
+transformers>=4.57.0  # Qwen3-VL requires transformers>=4.57.0
+vllm>=0.11.0  # Qwen3-VL requires vllm>=0.11.0
 wandb

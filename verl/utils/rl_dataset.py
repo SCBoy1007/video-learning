@@ -24,7 +24,7 @@ from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer, ProcessorMixin
 
 import verl.utils.torch_functional as verl_F
-from verl.models.transformers.qwen2_5_vl import get_rope_index
+from verl.models.transformers import get_rope_index_for_model
 
 
 def collate_fn(features: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -77,6 +77,7 @@ class RLHFDataset(Dataset):
         system_prompt=None,
         max_pixels=None,
         min_pixels=None,
+        model_type="qwen2.5vl",  # "qwen2.5vl" or "qwen3vl"
     ):
         self.tokenizer = tokenizer
         self.processor = processor
@@ -86,6 +87,10 @@ class RLHFDataset(Dataset):
         self.system_prompt = system_prompt
         self.max_pixels = max_pixels
         self.min_pixels = min_pixels
+        self.model_type = model_type
+
+        # Get the appropriate rope_index function
+        self.get_rope_index = get_rope_index_for_model(model_type)
 
         # Support multiple datasets separated by comma
         if ',' in data_path:
@@ -205,12 +210,17 @@ class RLHFDataset(Dataset):
         )
 
         if "images" in row_dict:
-            position_ids = get_rope_index(
+            rope_result = self.get_rope_index(
                 self.processor,
                 input_ids=input_ids,
                 image_grid_thw=image_grid_thw,
                 attention_mask=attention_mask,
-            )  # (3, seq_len)
+            )
+            # Qwen3-VL returns (position_ids, mrope_deltas), Qwen2.5-VL returns just position_ids
+            if isinstance(rope_result, tuple):
+                position_ids, _ = rope_result  # Qwen3-VL
+            else:
+                position_ids = rope_result  # Qwen2.5-VL (3, seq_len)
         else:
             position_ids = torch.clip(attention_mask.cumsum(dim=0) - 1, min=0, max=None)  # (seqlen,)
 

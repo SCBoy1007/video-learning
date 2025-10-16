@@ -363,6 +363,15 @@ class RayPPOTrainer:
         self._create_dataloader()
 
     def _create_dataloader(self):
+        # Detect model type from model path
+        model_path = self.config.worker.actor.model.model_path.lower()
+        if "qwen3" in model_path:
+            model_type = "qwen3vl"
+        elif "qwen2.5" in model_path or "qwen2-5" in model_path:
+            model_type = "qwen2.5vl"
+        else:
+            model_type = "qwen2.5vl"  # default to qwen2.5vl
+
         self.train_dataset = RLHFDataset(
             data_path=self.config.data.train_files,
             tokenizer=self.tokenizer,
@@ -373,6 +382,7 @@ class RayPPOTrainer:
             system_prompt=self.config.data.system_prompt,
             min_pixels=self.config.data.min_pixels,
             max_pixels=self.config.data.max_pixels,
+            model_type=model_type,
         )
         # use sampler for better ckpt resume
         if self.config.data.shuffle:
