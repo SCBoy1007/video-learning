@@ -22,16 +22,16 @@ RUN_NAME=$(basename "$0" .sh)
 # - BraTS GLI Main: T1C (1350 samples) + T2F (1350 samples)
 # - MSD Brain Tumor: T1Gd (484 samples) + FLAIR (484 samples)
 # Total: ~3,668 training samples (removed MEN-RT)
-TRAIN_DATA="data/BraTS_GLI_Main_Image_280/T1C,\
-data/BraTS_GLI_Main_Image_280/T2F,\
-data/MSD_BrainTumour_Image_280/T1Gd,\
-data/MSD_BrainTumour_Image_280/FLAIR"
+TRAIN_DATA="data/BraTS_GLI_Main_Image_840_MultiSlice/T1C,\
+data/BraTS_GLI_Main_Image_840_MultiSlice/T2F,\
+data/MSD_BrainTumour_Image_840_MultiSlice/T1Gd,\
+data/MSD_BrainTumour_Image_840_MultiSlice/FLAIR"
 
 # Validation datasets: 2 GLI Additional image datasets
 # - BraTS GLI Additional: T1C (273 samples) + T2F (273 samples)
 # Total: ~546 validation samples
-VAL_DATA="data/BraTS_GLI_Additional_Image_280/T1C,\
-data/BraTS_GLI_Additional_Image_280/T2F"
+VAL_DATA="data/BraTS_GLI_Additional_Image_840_MultiSlice/T1C,\
+data/BraTS_GLI_Additional_Image_840_MultiSlice/T2F"
 
 python3 -m verl.trainer.main \
     config=training_scripts/brain_tumor_image_4x80G.yaml \

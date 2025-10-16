@@ -47,16 +47,18 @@ class CustomRewardManager:
         reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
         already_print = 0
 
-        # Initialize metric accumulators for detailed tracking (7 metrics)
+        # ==================== SIMPLIFIED METRICS (EXISTENCE DETECTION) ====================
+        # Initialize metric accumulators for detailed tracking (5 metrics for existence detection)
+        # Old: 7 metrics for localization (thinking_tag, json_parseable, bbox_format, point_format, bbox_iou, point_distance, non_repeat)
+        # New: 5 metrics for existence (format, existence_accuracy, non_repeat, predicted_has_tumor, ground_truth_has_tumor)
+        # ==================================================================================
         if self.supports_details:
             metric_accumulators = {
-                'thinking_tag': [],
-                'json_parseable': [],
-                'bbox_format': [],
-                'point_format': [],
-                'bbox_iou': [],
-                'point_distance': [],
-                'non_repeat': []
+                'format': [],
+                'existence_accuracy': [],
+                'non_repeat': [],
+                'predicted_has_tumor': [],
+                'ground_truth_has_tumor': []
             }
 
         for i in range(len(data)):
@@ -76,17 +78,21 @@ class CustomRewardManager:
             prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=True)
             response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
 
-            # ground_truth = data_item.non_tensor_batch["answer"]
-            ground_truth = data_item.non_tensor_batch["solution"]
+            # ==================== EXTRACT has_tumor FROM DATA (NEW) ====================
+            # For existence detection task, we need has_tumor instead of bbox/point solution
+            # Old: ground_truth = data_item.non_tensor_batch["solution"]  # JSON string with bbox/point
+            # New: has_tumor = data_item.non_tensor_batch["has_tumor"]      # Boolean
+            # ============================================================================
+            has_tumor = data_item.non_tensor_batch.get("has_tumor", True)  # Default to True for backward compatibility
 
             # Get score with optional details
             if self.supports_details:
-                score, details = self.compute_score(response_str, ground_truth, return_details=True)
+                score, details = self.compute_score(response_str, has_tumor, return_details=True)
                 # Accumulate sub-metrics
                 for key in metric_accumulators:
                     metric_accumulators[key].append(details[key])
             else:
-                score = self.compute_score(response_str, ground_truth)
+                score = self.compute_score(response_str, has_tumor)
 
             reward_tensor[i, valid_response_length - 1] = score
 
@@ -94,15 +100,15 @@ class CustomRewardManager:
                 already_print += 1
                 print("[prompt]", prompt_str)
                 print("[response]", response_str)
-                print("[ground_truth]", ground_truth)
-                print(f"[score] {score:.3f}")
+                print(f"[ground_truth] has_tumor={has_tumor}")
+                print(f"[score] {score:.3f}/5.0")
 
-                # Print sub-metric breakdown if available
+                # Print sub-metric breakdown if available (SIMPLIFIED FOR EXISTENCE DETECTION)
                 if self.supports_details:
-                    print(f"  └─ Format: think={details['thinking_tag']:.1f} json={details['json_parseable']:.1f} "
-                          f"bbox_fmt={details['bbox_format']:.1f} point_fmt={details['point_format']:.1f}")
-                    print(f"     Accuracy: IoU={details['bbox_iou']:.3f} point_dist={details['point_distance']:.1f} "
-                          f"non_repeat={details['non_repeat']:.1f}")
+                    print(f"  └─ Format: {details['format']:.1f}/1.0")
+                    print(f"     Existence Accuracy: {details['existence_accuracy']:.1f}/3.0")
+                    print(f"     Non-repeat: {details['non_repeat']:.1f}/1.0")
+                    print(f"     Prediction: pred={bool(details['predicted_has_tumor'])} gt={bool(details['ground_truth_has_tumor'])}")
 
         # Store aggregated metrics in data for later logging
         if self.supports_details:

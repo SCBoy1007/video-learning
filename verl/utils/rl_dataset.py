@@ -108,16 +108,21 @@ class RLHFDataset(Dataset):
             # Single dataset (original logic)
             self.dataset = self._load_single_dataset(data_path)
 
-        # Set user prompt after loading dataset
+        # ==================== TUMOR EXISTENCE DETECTION (SIMPLIFIED) ====================
+        # Task: Only detect whether tumor exists (yes/no), NO localization required
+        # Output format: <think>...</think><answer>yes</answer> or <answer>no</answer>
+        # ==================================================================================
+
+        # Set user prompt after loading dataset - SIMPLIFIED FOR EXISTENCE DETECTION
         self.user_prompt = "<image>\n" \
             "Task: {Question}\n\n" \
             "Instructions:\n" \
-            "1. This is a brain MRI scan. Look for abnormal regions that appear different from normal brain tissue.\n" \
-            "2. Brain tumors typically appear as areas with altered intensity (brighter or darker regions) or irregular shapes.\n" \
-            "3. Locate the tumor region and determine its 2D bounding box [x_min, y_min, x_max, y_max] and center point [x, y].\n" \
-            "4. Output your analysis in <think></think> tags, then provide the final answer in <answer></answer> tags.\n\n" \
+            "1. This is a brain MRI scan. Carefully examine the entire image.\n" \
+            "2. Brain tumors typically appear as abnormal regions with altered intensity (brighter or darker areas) or irregular shapes.\n" \
+            "3. Determine whether a tumor exists in this image. Answer 'yes' if tumor is present, 'no' if not.\n" \
+            "4. Output your analysis in <think></think> tags, then provide your answer in <answer></answer> tags.\n\n" \
             "Output format example:\n" \
-            "<think>Analysis of the image shows...</think>\n" \
+            "<think>Analyzing the image, I observe...</think>\n" \
             "<answer>{Answer}</answer>"
 
     def _load_single_dataset(self, data_path: str):
@@ -152,25 +157,35 @@ class RLHFDataset(Dataset):
     def __getitem__(self, index):
         """
         Note that we also return the raw_input_ids so that it can be combined with other chat template
+        Now also returns has_tumor field for reward computation
         """
         row_dict = self.dataset[index]
-        
-        ################ Old Version ################
-        # messages = [
-        #     {"role": "system", "content": self.system_prompt},
-        #     {"role": "user", "content": self.user_prompt.format(Question=row_dict["problem"].lower().strip("."),
-        #                                                         Answer="{'bbox': [10,100,200,210], 'points_1': [30,110], 'points_2': [35,180]}")},
-        # ]
-        ################ Old Version ################
-        
+
+        # Extract has_tumor field from dataset (NEW)
+        has_tumor = row_dict.get("has_tumor", True)  # Default to True for backward compatibility
+
+        # ==================== SIMPLIFIED PROMPT (EXISTENCE DETECTION ONLY) ====================
+        # Answer example is now "yes" or "no" instead of bbox/point coordinates
+        # ========================================================================================
+
         messages = [
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": self.user_prompt.format(
                 Question=row_dict["problem"].lower().strip("."),
-                Answer="[{\"bbox_2d\": [10,100,200,210], \"point_2d\": [120,155]}]"
+                Answer="yes"  # Simplified answer format
             )},
         ]
         prompt = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+
+        # ==================== OLD LOCALIZATION PROMPT (COMMENTED OUT) ====================
+        # messages = [
+        #     {"role": "system", "content": self.system_prompt},
+        #     {"role": "user", "content": self.user_prompt.format(
+        #         Question=row_dict["problem"].lower().strip("."),
+        #         Answer="[{\"bbox_2d\": [10,100,200,210], \"point_2d\": [120,155]}]"
+        #     )},
+        # ]
+        # =================================================================================
 
         if "image" in row_dict:
             row_dict["images"] = [row_dict["image"]]
@@ -210,17 +225,13 @@ class RLHFDataset(Dataset):
         )
 
         if "images" in row_dict:
-            rope_result = self.get_rope_index(
+            # Both Qwen2.5-VL and Qwen3-VL now return (position_ids, mrope_deltas)
+            position_ids, _ = self.get_rope_index(
                 self.processor,
                 input_ids=input_ids,
                 image_grid_thw=image_grid_thw,
                 attention_mask=attention_mask,
             )
-            # Qwen3-VL returns (position_ids, mrope_deltas), Qwen2.5-VL returns just position_ids
-            if isinstance(rope_result, tuple):
-                position_ids, _ = rope_result  # Qwen3-VL
-            else:
-                position_ids = rope_result  # Qwen2.5-VL (3, seq_len)
         else:
             position_ids = torch.clip(attention_mask.cumsum(dim=0) - 1, min=0, max=None)  # (seqlen,)
 
@@ -228,4 +239,8 @@ class RLHFDataset(Dataset):
         row_dict["attention_mask"] = attention_mask
         row_dict["position_ids"] = position_ids
         row_dict["raw_prompt_ids"] = self.tokenizer.encode(raw_prompt, add_special_tokens=False)
+
+        # Add has_tumor field for reward computation (NEW)
+        row_dict["has_tumor"] = has_tumor
+
         return row_dict

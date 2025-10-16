@@ -25,7 +25,11 @@ worker:
     kl_loss_coef: 5.0e-3
     kl_loss_type: low_var_kl
     model:
-      model_path: Qwen/Qwen2.5-VL-7B-Instruct  # Overridden in shell
+      # Supports both Qwen2.5-VL and Qwen3-VL with automatic detection
+      # - Qwen2.5-VL-7B: Qwen/Qwen2.5-VL-7B-Instruct (32K context, requires transformers>=4.37.0)
+      # - Qwen3-VL-8B:   Qwen/Qwen3-VL-8B-Instruct   (256K context, requires transformers>=4.57.0)
+      # Model type is automatically detected from the model path
+      model_path: Qwen/Qwen2.5-VL-7B-Instruct  # Default, typically overridden in launch script
       enable_gradient_checkpointing: true
     optim:
       lr: 1.0e-6

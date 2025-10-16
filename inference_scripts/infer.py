@@ -1,5 +1,5 @@
 import argparse
-from transformers import Qwen2VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration, AutoProcessor
+from transformers import AutoModelForVision2Seq, AutoProcessor
 from qwen_vl_utils import process_vision_info
 import torch
 import json
@@ -53,9 +53,10 @@ def extract_bbox_points_think(output_text, x_factor, y_factor):
 
 def main():
     args = parse_args()
-    
-    #We recommend enabling flash_attention_2 for better acceleration and memory saving, especially in multi-image and video scenarios.
-    reasoning_model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+
+    # AutoModelForVision2Seq automatically detects Qwen2.5-VL, Qwen3-VL, etc.
+    # We recommend enabling flash_attention_2 for better acceleration and memory saving, especially in multi-image and video scenarios.
+    reasoning_model = AutoModelForVision2Seq.from_pretrained(
         args.reasoning_model_path,
         torch_dtype=torch.bfloat16,
         attn_implementation="flash_attention_2",
