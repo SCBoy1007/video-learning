@@ -38,8 +38,14 @@ def collate_fn(features: List[Dict[str, Any]]) -> Dict[str, Any]:
                 non_tensors[key].append(value)
 
     for key, value in tensors.items():
-        if key not in ["pixel_values", "image_grid_thw"]:
+        # Don't stack vision inputs and mrope_position_deltas (may have variable shapes)
+        if key not in ["pixel_values", "image_grid_thw", "mrope_position_deltas"]:
             tensors[key] = torch.stack(value, dim=0)
+
+    # Special handling for mrope_position_deltas (may be None for text-only, or variable shape)
+    if "mrope_position_deltas" in tensors:
+        # Stack if all are tensors (vision inputs)
+        tensors["mrope_position_deltas"] = torch.stack(tensors["mrope_position_deltas"], dim=0)
 
     return {**tensors, **non_tensors}
 
@@ -225,15 +231,20 @@ class RLHFDataset(Dataset):
         )
 
         if "images" in row_dict:
-            # Both Qwen2.5-VL and Qwen3-VL now return (position_ids, mrope_deltas)
-            position_ids, _ = self.get_rope_index(
+            # ==================== IMPORTANT: Preserve mrope_position_deltas ====================
+            # Qwen3-VL requires mrope_position_deltas (rope_deltas) for correct mRoPE encoding
+            # This field is critical for temporal position encoding in video/multi-image inputs
+            # ===================================================================================
+            position_ids, mrope_position_deltas = self.get_rope_index(
                 self.processor,
                 input_ids=input_ids,
                 image_grid_thw=image_grid_thw,
                 attention_mask=attention_mask,
             )
+            row_dict["mrope_position_deltas"] = mrope_position_deltas
         else:
             position_ids = torch.clip(attention_mask.cumsum(dim=0) - 1, min=0, max=None)  # (seqlen,)
+            row_dict["mrope_position_deltas"] = None  # No mRoPE for text-only inputs
 
         row_dict["input_ids"] = input_ids
         row_dict["attention_mask"] = attention_mask

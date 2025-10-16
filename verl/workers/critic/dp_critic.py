@@ -57,6 +57,10 @@ class DataParallelPPOCritic(BasePPOCritic):
             vision_inputs["pixel_values"] = torch.cat(micro_batch["pixel_values"], dim=0)
             vision_inputs["image_grid_thw"] = torch.cat(micro_batch["image_grid_thw"], dim=0)
 
+        # Pass rope_deltas for Qwen3-VL mRoPE
+        if "mrope_position_deltas" in micro_batch and micro_batch["mrope_position_deltas"] is not None:
+            vision_inputs["rope_deltas"] = micro_batch["mrope_position_deltas"]
+
         if self.config.padding_free:
             # TODO (yaowei): preprocess data for padding_free and ulysses
             raise NotImplementedError
@@ -89,6 +93,11 @@ class DataParallelPPOCritic(BasePPOCritic):
         self.critic_module.eval()
 
         select_keys = ["responses", "input_ids", "attention_mask", "position_ids"]
+
+        # Add mrope_position_deltas for Qwen3-VL
+        if "mrope_position_deltas" in data.batch:
+            select_keys.append("mrope_position_deltas")
+
         if "pixel_values" in data.non_tensor_batch.keys():
             non_tensor_select_keys = ["pixel_values", "image_grid_thw"]
         else:
@@ -114,6 +123,11 @@ class DataParallelPPOCritic(BasePPOCritic):
         self.critic_module.train()
 
         select_keys = ["input_ids", "responses", "attention_mask", "position_ids", "values", "returns"]
+
+        # Add mrope_position_deltas for Qwen3-VL
+        if "mrope_position_deltas" in data.batch:
+            select_keys.append("mrope_position_deltas")
+
         if "pixel_values" in data.non_tensor_batch.keys():
             non_tensor_select_keys = ["pixel_values", "image_grid_thw"]
         else:
