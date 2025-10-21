@@ -76,6 +76,12 @@ class CustomRewardManager:
             prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=True)
             response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
 
+            # FIXME: Qwen3-VL-Thinking adds "<think>\n" via add_generation_prompt
+            # So the model's response doesn't include the opening <think> tag
+            # We need to prepend it for reward matching
+            if not response_str.startswith('<think>'):
+                response_str = '<think>\n' + response_str
+
             # ground_truth = data_item.non_tensor_batch["answer"]
             ground_truth = data_item.non_tensor_batch["solution"]
 

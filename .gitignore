@@ -180,4 +180,4 @@ tmp_model_upload
 visionreasoner_workdir/
 data
 pretrained_models
-visual_results
+visual_resultsQwen3-VL/

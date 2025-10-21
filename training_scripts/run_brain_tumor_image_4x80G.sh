@@ -8,13 +8,14 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
 set -x
 
 # Reduce log verbosity
-export VLLM_ATTENTION_BACKEND=XFORMERS
+# Let VLLM auto-select attention backend (will use the best available)
+# export VLLM_ATTENTION_BACKEND=FLASH_ATTN  # Disabled - has headdim restrictions
 export RAY_DEDUP_LOGS=1
 export TRANSFORMERS_NO_ADVISORY_WARNINGS=1
 export VLLM_LOGGING_LEVEL=WARNING
 export TOKENIZERS_PARALLELISM=false
 
-MODEL_PATH=pretrained_models/Qwen2.5-VL-7B-Instruct
+MODEL_PATH=/root/Documents/video-learning/models/Qwen3-VL-8B-Thinking
 
 RUN_NAME=$(basename "$0" .sh)
 
