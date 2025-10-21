@@ -24,7 +24,7 @@ from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer, ProcessorMixin
 
 import verl.utils.torch_functional as verl_F
-from verl.models.transformers.qwen2_5_vl import get_rope_index
+from verl.models.transformers import get_rope_index_for_model
 
 
 def collate_fn(features: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -38,8 +38,14 @@ def collate_fn(features: List[Dict[str, Any]]) -> Dict[str, Any]:
                 non_tensors[key].append(value)
 
     for key, value in tensors.items():
-        if key not in ["pixel_values", "image_grid_thw"]:
+        # Don't stack vision inputs and mrope_position_deltas (may have variable shapes)
+        if key not in ["pixel_values", "image_grid_thw", "mrope_position_deltas"]:
             tensors[key] = torch.stack(value, dim=0)
+
+    # Special handling for mrope_position_deltas (may be None for text-only, or variable shape)
+    if "mrope_position_deltas" in tensors:
+        # Stack if all are tensors (vision inputs)
+        tensors["mrope_position_deltas"] = torch.stack(tensors["mrope_position_deltas"], dim=0)
 
     return {**tensors, **non_tensors}
 
@@ -77,6 +83,7 @@ class RLHFDataset(Dataset):
         system_prompt=None,
         max_pixels=None,
         min_pixels=None,
+        model_type="qwen2.5vl",  # "qwen2.5vl" or "qwen3vl"
     ):
         self.tokenizer = tokenizer
         self.processor = processor
@@ -86,6 +93,10 @@ class RLHFDataset(Dataset):
         self.system_prompt = system_prompt
         self.max_pixels = max_pixels
         self.min_pixels = min_pixels
+        self.model_type = model_type
+
+        # Get the appropriate rope_index function
+        self.get_rope_index = get_rope_index_for_model(model_type)
 
         # Support multiple datasets separated by comma
         if ',' in data_path:
@@ -104,13 +115,16 @@ class RLHFDataset(Dataset):
             self.dataset = self._load_single_dataset(data_path)
 
         # Set user prompt after loading dataset
+        # NOTE: Qwen3-VL uses normalized coordinates (0-1000), but we want pixel coordinates
+        # The model will automatically use the resized_width/height we provide in messages
         self.user_prompt = "<image>\n" \
             "Task: {Question}\n\n" \
             "Instructions:\n" \
             "1. This is a brain MRI scan. Look for abnormal regions that appear different from normal brain tissue.\n" \
             "2. Brain tumors typically appear as areas with altered intensity (brighter or darker regions) or irregular shapes.\n" \
             "3. Locate the tumor region and determine its 2D bounding box [x_min, y_min, x_max, y_max] and center point [x, y].\n" \
-            "4. Output your analysis in <think></think> tags, then provide the final answer in <answer></answer> tags.\n\n" \
+            "4. Use normalized coordinates in range [0, 1000] for bbox_2d and point_2d.\n" \
+            "5. Output your analysis in <think></think> tags, then provide the final answer in <answer></answer> tags.\n\n" \
             "Output format example:\n" \
             "<think>Analysis of the image shows...</think>\n" \
             "<answer>{Answer}</answer>"
@@ -158,22 +172,44 @@ class RLHFDataset(Dataset):
         # ]
         ################ Old Version ################
         
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": self.user_prompt.format(
-                Question=row_dict["problem"].lower().strip("."),
-                Answer="[{\"bbox_2d\": [10,100,200,210], \"point_2d\": [120,155]}]"
-            )},
-        ]
-        prompt = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-
+        # Preprocess images first to get actual dimensions
         if "image" in row_dict:
             row_dict["images"] = [row_dict["image"]]
-        if "images" in row_dict:  # expand image token
-            raw_prompt = prompt.replace("<image>", "<|vision_start|><|image_pad|><|vision_end|>")
-            row_dict["images"] = [
+
+        if "images" in row_dict:
+            # Process images to get final dimensions
+            processed_images = [
                 process_image(image, self.max_pixels, self.min_pixels) for image in row_dict["images"]
             ]
+            row_dict["images"] = processed_images
+
+            # Get image dimensions for Qwen3-VL (critical for correct bbox coordinates!)
+            img_width, img_height = processed_images[0].size
+
+            # Store image size in user_prompt for the model to understand coordinate space
+            # Note: We use string-based messages to be compatible with manual image processing below
+            size_hint = f"Image size: {img_width}x{img_height} pixels. "
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": size_hint + self.user_prompt.format(
+                    Question=row_dict["problem"].lower().strip("."),
+                    Answer="[{\"bbox_2d\": [10,100,200,210], \"point_2d\": [120,155]}]"
+                )},
+            ]
+        else:
+            # Text-only messages
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": self.user_prompt.format(
+                    Question=row_dict["problem"].lower().strip("."),
+                    Answer="[{\"bbox_2d\": [10,100,200,210], \"point_2d\": [120,155]}]"
+                )},
+            ]
+
+        prompt = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+
+        if "images" in row_dict:  # expand image token
+            raw_prompt = prompt.replace("<image>", "<|vision_start|><|image_pad|><|vision_end|>")
             image_inputs = self.processor.image_processor(row_dict["images"], return_tensors="pt")
             image_grid_thw = image_inputs["image_grid_thw"]
             row_dict.update(image_inputs)
@@ -205,14 +241,20 @@ class RLHFDataset(Dataset):
         )
 
         if "images" in row_dict:
-            position_ids = get_rope_index(
+            # ==================== IMPORTANT: Preserve mrope_position_deltas ====================
+            # Qwen3-VL requires mrope_position_deltas (rope_deltas) for correct mRoPE encoding
+            # This field is critical for temporal position encoding in video/multi-image inputs
+            # ===================================================================================
+            position_ids, mrope_position_deltas = self.get_rope_index(
                 self.processor,
                 input_ids=input_ids,
                 image_grid_thw=image_grid_thw,
                 attention_mask=attention_mask,
-            )  # (3, seq_len)
+            )
+            row_dict["mrope_position_deltas"] = mrope_position_deltas
         else:
             position_ids = torch.clip(attention_mask.cumsum(dim=0) - 1, min=0, max=None)  # (seqlen,)
+            row_dict["mrope_position_deltas"] = None  # No mRoPE for text-only inputs
 
         row_dict["input_ids"] = input_ids
         row_dict["attention_mask"] = attention_mask

@@ -40,36 +40,59 @@ def vision_reasoner_format_reward(predict_str: str) -> float:
     
     return thinking_format_reward + segmentation_format_reward
 
-def vision_reasoner_accuracy_reward(predict_str: str, ground_truth: str) -> float:
+def vision_reasoner_accuracy_reward(predict_str: str, ground_truth: str, image_size: int = 280) -> float:
+    """
+    Calculate accuracy reward with coordinate normalization handling.
+
+    Qwen3-VL outputs normalized coordinates (0-1000), while ground truth uses pixel coordinates.
+    This function converts Qwen3-VL's normalized coords to pixels before comparison.
+
+    Args:
+        predict_str: Model prediction with <answer>...</answer> tags
+        ground_truth: Ground truth JSON with pixel coordinates
+        image_size: Image dimension (assuming square images, default 280x280)
+    """
     max_accuracy_reward = 0.0
     MAX_OBJECTS = 120  # 设置上限
-    
+
     try:
         gt_data = json.loads(ground_truth)
         gt_bboxes = [item['bbox_2d'] for item in gt_data]
         gt_points = [item['point_2d'] for item in gt_data]
-            
+
         #json_match = re.search(r'```json\s*(.*?)\s*```', predict_str, re.DOTALL)
         json_match = re.search(r'<answer>\s*(.*?)\s*</answer>', predict_str, re.DOTALL)
         if json_match:
             data = json.loads(json_match.group(1))
             pred_bboxes = [item['bbox_2d'] for item in data]
             pred_points = [item['point_2d'] for item in data]
-            
+
             # 只有当预测或真实值超过上限时才截断
             if len(pred_bboxes) > MAX_OBJECTS:
                 pred_bboxes = pred_bboxes[:MAX_OBJECTS]
                 pred_points = pred_points[:MAX_OBJECTS]
-            
+
             if len(gt_bboxes) > MAX_OBJECTS:
                 gt_bboxes = gt_bboxes[:MAX_OBJECTS]
                 gt_points = gt_points[:MAX_OBJECTS]
-            
+
             # 预处理数据为numpy数组
             pred_bboxes = np.array(pred_bboxes)  # (M,4)
             pred_points = np.array(pred_points)  # (M,2)
             gt_bboxes = np.array(gt_bboxes)    # (N,4)
             gt_points = np.array(gt_points)     # (N,2)
+
+            # ==================== CRITICAL: Convert Qwen3-VL normalized coords to pixels ====================
+            # Qwen3-VL uses normalized coordinates (0-1000), need to convert to pixel coords
+            # Formula: pixel_coord = (normalized_coord / 1000.0) * image_size
+            # Only convert if predictions are in normalized range (check if max coord > image_size)
+            # ================================================================================================
+            if len(pred_bboxes) > 0 and pred_bboxes.max() > image_size * 1.5:
+                # Predictions are likely normalized (0-1000), convert to pixels
+                pred_bboxes = (pred_bboxes / 1000.0 * image_size).astype(np.float32)
+                pred_points = (pred_points / 1000.0 * image_size).astype(np.float32)
+
+            # Ground truth is already in pixel coordinates, no conversion needed
             
             # 并行计算所有指标
             iou_matrix = batch_iou(pred_bboxes, gt_bboxes)  # (M,N)
@@ -192,6 +215,12 @@ def vision_reasoner_compute_score(predict_str: str, ground_truth: str, return_de
                     gt_bbox = np.array([gt_data[0]['bbox_2d']])
                     pred_point = np.array([pred_data[0]['point_2d']])
                     gt_point = np.array([gt_data[0]['point_2d']])
+
+                    # Convert Qwen3-VL normalized coords to pixels (same logic as accuracy_reward)
+                    image_size = 280  # Default image size
+                    if pred_bbox.max() > image_size * 1.5:
+                        pred_bbox = (pred_bbox / 1000.0 * image_size).astype(np.float32)
+                        pred_point = (pred_point / 1000.0 * image_size).astype(np.float32)
 
                     iou = batch_iou(pred_bbox, gt_bbox)[0,0]
                     details['bbox_iou'] = float(iou)
