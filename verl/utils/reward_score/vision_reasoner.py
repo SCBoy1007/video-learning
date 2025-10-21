@@ -282,15 +282,198 @@ def batch_points_in_box(points, boxes):
     y_check = (points[:,1] >= boxes[:,1]) & (points[:,1] <= boxes[:,3])
     return x_check & y_check
 
+def vision_reasoner_smooth_existence_compute_score(
+    predict_str: str,
+    ground_truth: str,
+    has_tumor: bool,
+    image_size: int = 280,
+    area_threshold: int = 100,
+    sigmoid_scale: float = 50.0,
+    return_details: bool = False
+):
+    """
+    Smooth existence detection reward using bbox area as confidence signal.
+
+    This function provides smooth gradient for tumor existence detection by using
+    bbox area to represent model's confidence:
+    - Large bbox area → model predicts tumor exists
+    - Small bbox area → model predicts no tumor
+
+    Reward Components (max 7.0):
+    1. Format reward (3.0): thinking tag + bbox/point format
+    2. Existence reward (3.0): smooth reward based on bbox area
+    3. Localization reward (if has_tumor): IoU-based accuracy
+    4. Non-repeat (1.0): penalize repetitive text
+
+    Args:
+        predict_str: Model prediction string
+        ground_truth: Ground truth JSON (for localization if has_tumor=True)
+        has_tumor: Boolean indicating if tumor exists in ground truth
+        image_size: Image dimension (default 280x280)
+        area_threshold: Center point of sigmoid function (default 100 pixels²)
+        sigmoid_scale: Scale factor for sigmoid smoothness (default 50.0)
+        return_details: If True, return (score, details_dict)
+
+    Returns:
+        float or (float, dict): Total reward or (total_reward, detailed_breakdown)
+    """
+    # 1. Format reward (3.0 max)
+    format_reward = vision_reasoner_format_reward(predict_str)
+
+    # 2. Initialize existence and localization rewards
+    existence_reward = 0.0
+    localization_reward = 0.0
+
+    # 3. Extract predicted bbox area
+    pred_area = 0.0
+    pred_iou = 0.0
+    pred_point_dist = 0.0
+
+    try:
+        json_match = re.search(r'<answer>\s*(.*?)\s*</answer>', predict_str, re.DOTALL)
+        if json_match:
+            pred_data = json.loads(json_match.group(1))
+            if pred_data and len(pred_data) > 0:
+                pred_bbox = pred_data[0]['bbox_2d']
+
+                # Convert Qwen3-VL normalized coords to pixels if needed
+                pred_bbox_arr = np.array(pred_bbox)
+                if pred_bbox_arr.max() > image_size * 1.5:
+                    pred_bbox_arr = (pred_bbox_arr / 1000.0 * image_size).astype(np.float32)
+                    pred_bbox = pred_bbox_arr.tolist()
+
+                # Calculate bbox area
+                width = abs(pred_bbox[2] - pred_bbox[0])
+                height = abs(pred_bbox[3] - pred_bbox[1])
+                pred_area = width * height
+
+                # Smooth existence reward using sigmoid function
+                # sigmoid(x) = 1 / (1 + exp(-(x - threshold) / scale))
+                # When area < threshold: prob → 0 (no tumor)
+                # When area > threshold: prob → 1 (has tumor)
+                prob_has_tumor = 1.0 / (1.0 + np.exp(-(pred_area - area_threshold) / sigmoid_scale))
+
+                if has_tumor:
+                    # Ground truth has tumor: reward high area predictions
+                    existence_reward = prob_has_tumor * 3.0
+
+                    # Additionally compute localization reward if bbox is large enough
+                    if pred_area > area_threshold * 0.5:  # Only compute if area suggests tumor
+                        gt_data = json.loads(ground_truth)
+                        if gt_data and len(gt_data) > 0:
+                            gt_bbox = np.array([gt_data[0]['bbox_2d']])
+                            pred_bbox_for_iou = np.array([pred_bbox])
+
+                            # Calculate IoU
+                            iou = batch_iou(pred_bbox_for_iou, gt_bbox)[0, 0]
+                            pred_iou = float(iou)
+
+                            # Localization reward based on IoU (0-1)
+                            localization_reward = pred_iou
+
+                            # Calculate point distance if available
+                            if 'point_2d' in pred_data[0]:
+                                pred_point = np.array([pred_data[0]['point_2d']])
+                                if pred_point.max() > image_size * 1.5:
+                                    pred_point = (pred_point / 1000.0 * image_size).astype(np.float32)
+
+                                gt_point = np.array([gt_data[0]['point_2d']])
+                                dist = batch_points_distance(pred_point, gt_point)[0, 0]
+                                pred_point_dist = float(dist)
+                else:
+                    # Ground truth has no tumor: reward small area predictions
+                    existence_reward = (1.0 - prob_has_tumor) * 3.0
+
+    except Exception as e:
+        # Format error or parsing error: only format reward applies
+        pass
+
+    # 4. Non-repeat reward
+    non_repeat_reward = vision_reasoner_non_repeat_reward(predict_str)
+
+    # Total reward
+    total_reward = format_reward + existence_reward + localization_reward + non_repeat_reward
+
+    if return_details:
+        details = {
+            'format': format_reward,
+            'existence': existence_reward,
+            'localization': localization_reward,
+            'non_repeat': non_repeat_reward,
+            'pred_area': pred_area,
+            'pred_iou': pred_iou,
+            'pred_point_dist': pred_point_dist,
+            'gt_has_tumor': 1.0 if has_tumor else 0.0,
+        }
+        return total_reward, details
+    else:
+        return total_reward
+
+
 if __name__ == "__main__":
-    predict_str = """
+    print("="*80)
+    print("Test 1: Localization task (original function)")
+    print("="*80)
+    predict_str = """<think>I can see a tumor in the image.</think>
 <answer>
 [{"bbox_2d": [10, 100, 398, 423], "point_2d": [283, 169]}]
 </answer>
 """
-    ground_truth = """
-[{"bbox_2d": [416, 7, 833, 553], "point_2d": [648, 249]}]"""
-    print(predict_str)
-    print(ground_truth)
-    print(vision_reasoner_compute_score(predict_str, ground_truth))
+    ground_truth = """[{"bbox_2d": [416, 7, 833, 553], "point_2d": [648, 249]}]"""
+    print("Prediction:", predict_str)
+    print("Ground truth:", ground_truth)
+    score = vision_reasoner_compute_score(predict_str, ground_truth)
+    print(f"Score: {score:.3f}")
+
+    print("\n" + "="*80)
+    print("Test 2: Smooth existence detection - True Positive")
+    print("="*80)
+    predict_large_bbox = """<think>I see abnormal regions indicating tumor.</think>
+<answer>
+[{"bbox_2d": [50, 50, 200, 200], "point_2d": [125, 125]}]
+</answer>
+"""
+    ground_truth_tumor = """[{"bbox_2d": [60, 55, 190, 195], "point_2d": [125, 125]}]"""
+    score, details = vision_reasoner_smooth_existence_compute_score(
+        predict_large_bbox, ground_truth_tumor, has_tumor=True, return_details=True
+    )
+    print("Prediction (large bbox):", predict_large_bbox)
+    print(f"Score: {score:.3f}/8.0")
+    print(f"Details: {details}")
+
+    print("\n" + "="*80)
+    print("Test 3: Smooth existence detection - True Negative")
+    print("="*80)
+    predict_small_bbox = """<think>The brain tissue appears normal.</think>
+<answer>
+[{"bbox_2d": [0, 0, 1, 1], "point_2d": [0, 0]}]
+</answer>
+"""
+    ground_truth_no_tumor = """[{"bbox_2d": [0, 0, 1, 1], "point_2d": [0, 0]}]"""
+    score, details = vision_reasoner_smooth_existence_compute_score(
+        predict_small_bbox, ground_truth_no_tumor, has_tumor=False, return_details=True
+    )
+    print("Prediction (small bbox):", predict_small_bbox)
+    print(f"Score: {score:.3f}/7.0")
+    print(f"Details: {details}")
+
+    print("\n" + "="*80)
+    print("Test 4: Smooth existence detection - False Positive")
+    print("="*80)
+    score, details = vision_reasoner_smooth_existence_compute_score(
+        predict_large_bbox, ground_truth_no_tumor, has_tumor=False, return_details=True
+    )
+    print("Prediction (large bbox, but no tumor):", predict_large_bbox)
+    print(f"Score: {score:.3f}/7.0")
+    print(f"Details: {details}")
+
+    print("\n" + "="*80)
+    print("Test 5: Smooth existence detection - False Negative")
+    print("="*80)
+    score, details = vision_reasoner_smooth_existence_compute_score(
+        predict_small_bbox, ground_truth_tumor, has_tumor=True, return_details=True
+    )
+    print("Prediction (small bbox, but has tumor):", predict_small_bbox)
+    print(f"Score: {score:.3f}/8.0")
+    print(f"Details: {details}")
     
