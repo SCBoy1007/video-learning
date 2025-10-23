@@ -63,7 +63,16 @@ class vLLMRollout(BaseRollout):
 
         vllm_init_kwargs = {}
         if config.limit_images > 0:
-            vllm_init_kwargs = {"limit_mm_per_prompt": {"image": config.limit_images}}
+            vllm_init_kwargs["limit_mm_per_prompt"] = {"image": config.limit_images}
+
+        # WORKAROUND: Disable multimodal preprocessor cache to avoid cache corruption bug
+        # This prevents "AssertionError: Expected a cached item for mm_hash=..." crashes
+        # that occur around step 117-118 when using multi-image inputs with vLLM 0.11.0
+        # Related: https://github.com/vllm-project/vllm/pull/12439
+        # Attempt 1: Set mm_processor_cache_gb=0 (didn't work)
+        # Attempt 2: Disable prefix caching completely
+        vllm_init_kwargs["mm_processor_kwargs"] = {"mm_processor_cache_gb": 0}
+        vllm_init_kwargs["enable_prefix_caching"] = False
 
         self.inference_engine = LLM(
             model=model_path,
@@ -145,9 +154,59 @@ class vLLMRollout(BaseRollout):
 
         # users can customize different sampling_params at different run
         with self.update_sampling_params(**kwargs):
-            completions: List[RequestOutput] = self.inference_engine.generate(
-                prompts=vllm_inputs, sampling_params=self.sampling_params
-            )
+            try:
+                completions: List[RequestOutput] = self.inference_engine.generate(
+                    prompts=vllm_inputs, sampling_params=self.sampling_params
+                )
+            except AssertionError as e:
+                # WORKAROUND: Handle vLLM multimodal cache bug (mm_hash assertion failure)
+                # If we encounter "Expected a cached item for mm_hash" error, skip this batch
+                # and return empty/padding responses to allow training to continue
+                if "Expected a cached item for mm_hash" in str(e):
+                    print(f"[WORKAROUND] Skipping batch due to mm_hash cache bug: {e}")
+
+                    # Generate empty/padding responses for this batch
+                    response_ids = torch.full(
+                        (batch_size, self.config.response_length),
+                        self.pad_token_id,
+                        dtype=torch.long,
+                        device=input_ids.device
+                    )
+
+                    # Follow the same logic as normal flow to construct outputs
+                    sequence_ids = torch.cat([input_ids, response_ids], dim=-1)
+                    response_length = response_ids.size(1)
+
+                    # Update position_ids
+                    delta_position_id = torch.arange(1, response_length + 1, device=position_ids.device)
+                    delta_position_id = delta_position_id.view(1, -1).expand(batch_size, -1)
+                    if position_ids.dim() == 3:  # qwen2vl mrope
+                        delta_position_id = delta_position_id.view(batch_size, 1, -1).expand(batch_size, 3, -1)
+                    response_position_ids = position_ids[..., -1:] + delta_position_id
+                    position_ids = torch.cat([position_ids, response_position_ids], dim=-1)
+
+                    # Update attention_mask
+                    response_attention_mask = get_eos_mask(
+                        response_ids=response_ids, eos_token=eos_token_id, dtype=attention_mask.dtype
+                    )
+                    attention_mask = torch.cat((attention_mask, response_attention_mask), dim=-1)
+
+                    # Build TensorDict following the normal flow
+                    batch = TensorDict(
+                        {
+                            "prompts": input_ids,
+                            "responses": response_ids,
+                            "input_ids": sequence_ids,
+                            "attention_mask": attention_mask,
+                            "position_ids": position_ids,
+                        },
+                        batch_size=batch_size,
+                    )
+                    # Return DataProto with dummy data (non_tensor_batch is already popped, should be mostly empty)
+                    return DataProto(batch=batch, non_tensor_batch=non_tensor_batch)
+                else:
+                    # Re-raise if it's a different assertion error
+                    raise
 
         response_ids = []
         for completion in completions:

@@ -115,18 +115,19 @@ class RLHFDataset(Dataset):
             self.dataset = self._load_single_dataset(data_path)
 
         # Set user prompt after loading dataset
-        # NOTE: Qwen3-VL uses normalized coordinates (0-1000), but we want pixel coordinates
-        # The model will automatically use the resized_width/height we provide in messages
-        self.user_prompt = "<image>\n" \
+        # NOTE: Multi-image (8 slices) - Find the largest tumor across all slices
+        # Keep same coordinate system as before: normalized (0-1000) with threshold-based conversion in reward
+        self.user_prompt = "<image>" * 8 + "\n" \
             "Task: {Question}\n\n" \
             "Instructions:\n" \
-            "1. This is a brain MRI scan. Look for abnormal regions that appear different from normal brain tissue.\n" \
-            "2. Brain tumors typically appear as areas with altered intensity (brighter or darker regions) or irregular shapes.\n" \
-            "3. Locate the tumor region and determine its 2D bounding box [x_min, y_min, x_max, y_max] and center point [x, y].\n" \
-            "4. Use normalized coordinates in range [0, 1000] for bbox_2d and point_2d.\n" \
-            "5. Output your analysis in <think></think> tags, then provide the final answer in <answer></answer> tags.\n\n" \
+            "1. You are viewing 8 MRI slices sampled uniformly from a 3D brain scan (from shallow to deep).\n" \
+            "2. Each slice may contain brain tumor with varying sizes. Your task is to identify the slice with the LARGEST tumor.\n" \
+            "3. Brain tumors typically appear as areas with altered intensity (brighter or darker regions) or irregular shapes.\n" \
+            "4. Locate the largest tumor region and determine its 2D bounding box [x_min, y_min, x_max, y_max] and center point [x, y].\n" \
+            "5. Use normalized coordinates in range [0, 1000] for bbox_2d and point_2d.\n" \
+            "6. Output your analysis in <think></think> tags, then provide the final answer in <answer></answer> tags.\n\n" \
             "Output format example:\n" \
-            "<think>Analysis of the image shows...</think>\n" \
+            "<think>Analyzing all 8 slices... Slice 4 shows the largest tumor region...</think>\n" \
             "<answer>{Answer}</answer>"
 
     def _load_single_dataset(self, data_path: str):

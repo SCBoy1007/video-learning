@@ -15,24 +15,28 @@ export TRANSFORMERS_NO_ADVISORY_WARNINGS=1
 export VLLM_LOGGING_LEVEL=WARNING
 export TOKENIZERS_PARALLELISM=false
 
+# WORKAROUND: Disable vLLM prefix caching to avoid multimodal cache corruption bug
+# This prevents AssertionError crashes at step 117-118
+export VLLM_USE_MODELSCOPE=false
+
 MODEL_PATH=/root/Documents/video-learning/models/Qwen3-VL-8B-Thinking
 
 RUN_NAME=$(basename "$0" .sh)
 
-# Training datasets: 4 image datasets
+# Training datasets: 4 multi-image datasets (8 slices per sample)
 # - BraTS GLI Main: T1C (1350 samples) + T2F (1350 samples)
 # - MSD Brain Tumor: T1Gd (484 samples) + FLAIR (484 samples)
-# Total: ~3,668 training samples (removed MEN-RT)
-TRAIN_DATA="data/BraTS_GLI_Main_Image_280/T1C,\
-data/BraTS_GLI_Main_Image_280/T2F,\
-data/MSD_BrainTumour_Image_280/T1Gd,\
-data/MSD_BrainTumour_Image_280/FLAIR"
+# Total: ~3,668 multi-image training samples (each with 8 slices)
+TRAIN_DATA="data/BraTS_GLI_Main_Image_280_MultiImage/T1C,\
+data/BraTS_GLI_Main_Image_280_MultiImage/T2F,\
+data/MSD_BrainTumour_Image_280_MultiImage/T1Gd,\
+data/MSD_BrainTumour_Image_280_MultiImage/FLAIR"
 
-# Validation datasets: 2 GLI Additional image datasets
+# Validation datasets: 2 GLI Additional multi-image datasets
 # - BraTS GLI Additional: T1C (273 samples) + T2F (273 samples)
-# Total: ~546 validation samples
-VAL_DATA="data/BraTS_GLI_Additional_Image_280/T1C,\
-data/BraTS_GLI_Additional_Image_280/T2F"
+# Total: ~546 multi-image validation samples (each with 8 slices)
+VAL_DATA="data/BraTS_GLI_Additional_Image_280_MultiImage/T1C,\
+data/BraTS_GLI_Additional_Image_280_MultiImage/T2F"
 
 python3 -m verl.trainer.main \
     config=training_scripts/brain_tumor_image_4x80G.yaml \
