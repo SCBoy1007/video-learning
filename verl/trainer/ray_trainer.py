@@ -680,9 +680,11 @@ class RayPPOTrainer:
             if self.config.trainer.val_only:
                 return
 
-        for _ in range(self.config.trainer.total_episodes):
+        for episode in range(self.config.trainer.total_episodes):
+            print(f"[DEBUG] ===== Starting Episode {episode + 1}/{self.config.trainer.total_episodes} =====", flush=True)
             for batch_dict in self.train_dataloader:
                 self.global_steps += 1
+                print(f"[DEBUG] ===== Step {self.global_steps} =====", flush=True)
                 if self.global_steps >= self.training_steps:
                     break
 
@@ -705,8 +707,10 @@ class RayPPOTrainer:
 
                 with _timer("step", timing_raw):
                     # generate a batch
+                    print(f"[DEBUG] Starting generation phase (step {self.global_steps})...", flush=True)
                     with _timer("gen", timing_raw):  # wg: worker group
                         gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
+                    print(f"[DEBUG] Generation completed successfully (step {self.global_steps})", flush=True)
 
                     if self.config.algorithm.adv_estimator == "remax":
                         with _timer("gen_max", timing_raw):

@@ -7,17 +7,18 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
 
 set -x
 
-# Reduce log verbosity
-# Let VLLM auto-select attention backend (will use the best available)
-# export VLLM_ATTENTION_BACKEND=FLASH_ATTN  # Disabled - has headdim restrictions
-export RAY_DEDUP_LOGS=1
+# Debug settings - enable detailed logging for troubleshooting
+export RAY_DEDUP_LOGS=0  # Show all Ray logs to debug distributed issues
 export TRANSFORMERS_NO_ADVISORY_WARNINGS=1
-export VLLM_LOGGING_LEVEL=WARNING
+export VLLM_LOGGING_LEVEL=INFO  # Changed from WARNING to INFO for more details
 export TOKENIZERS_PARALLELISM=false
+export PYTHONUNBUFFERED=1  # Ensure Python output is not buffered
 
 # WORKAROUND: Disable vLLM prefix caching to avoid multimodal cache corruption bug
 # This prevents AssertionError crashes at step 117-118
+# See: https://github.com/vllm-project/vllm/issues/20261
 export VLLM_USE_MODELSCOPE=false
+export VLLM_ENABLE_PREFIX_CACHING=0
 
 MODEL_PATH=/root/Documents/video-learning/models/Qwen3-VL-8B-Thinking
 

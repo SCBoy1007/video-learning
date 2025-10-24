@@ -20,6 +20,8 @@ When working with FSDP:
 
 from contextlib import contextmanager
 from typing import Any, List, Union
+import sys
+import traceback
 
 import torch
 import torch.distributed
@@ -67,12 +69,23 @@ class vLLMRollout(BaseRollout):
 
         # WORKAROUND: Disable multimodal preprocessor cache to avoid cache corruption bug
         # This prevents "AssertionError: Expected a cached item for mm_hash=..." crashes
-        # that occur around step 117-118 when using multi-image inputs with vLLM 0.11.0
-        # Related: https://github.com/vllm-project/vllm/pull/12439
-        # Attempt 1: Set mm_processor_cache_gb=0 (didn't work)
-        # Attempt 2: Disable prefix caching completely
-        vllm_init_kwargs["mm_processor_kwargs"] = {"mm_processor_cache_gb": 0}
+        # that occur around step 117-118 when using multi-image inputs with vLLM 0.11.0+
+        # Related: https://github.com/vllm-project/vllm/issues/20261
+        # Solution: Disable BOTH prefix caching AND multimodal preprocessor cache
         vllm_init_kwargs["enable_prefix_caching"] = False
+        vllm_init_kwargs["disable_mm_preprocessor_cache"] = True
+        vllm_init_kwargs["mm_processor_kwargs"] = {"mm_processor_cache_gb": 0}
+
+        # DEBUG: Log vLLM initialization parameters
+        print("=" * 80, file=sys.stderr, flush=True)
+        print("[DEBUG] vLLM Initialization Parameters:", file=sys.stderr, flush=True)
+        print(f"[DEBUG]   enable_prefix_caching: {vllm_init_kwargs.get('enable_prefix_caching')}", file=sys.stderr, flush=True)
+        print(f"[DEBUG]   disable_mm_preprocessor_cache: {vllm_init_kwargs.get('disable_mm_preprocessor_cache')}", file=sys.stderr, flush=True)
+        print(f"[DEBUG]   mm_processor_kwargs: {vllm_init_kwargs.get('mm_processor_kwargs')}", file=sys.stderr, flush=True)
+        print(f"[DEBUG]   limit_mm_per_prompt: {vllm_init_kwargs.get('limit_mm_per_prompt')}", file=sys.stderr, flush=True)
+        print(f"[DEBUG]   tensor_parallel_size: {config.tensor_parallel_size}", file=sys.stderr, flush=True)
+        print(f"[DEBUG]   gpu_memory_utilization: {config.gpu_memory_utilization}", file=sys.stderr, flush=True)
+        print("=" * 80, file=sys.stderr, flush=True)
 
         self.inference_engine = LLM(
             model=model_path,
@@ -154,16 +167,27 @@ class vLLMRollout(BaseRollout):
 
         # users can customize different sampling_params at different run
         with self.update_sampling_params(**kwargs):
+            # DEBUG: Log batch information before generation
+            print(f"[DEBUG] Starting vLLM generation: batch_size={batch_size}, num_inputs={len(vllm_inputs)}", file=sys.stderr, flush=True)
+            if vllm_inputs and "multi_modal_data" in vllm_inputs[0]:
+                num_images = len(vllm_inputs[0]["multi_modal_data"].get("image", []))
+                print(f"[DEBUG] Multimodal batch with {num_images} images per sample", file=sys.stderr, flush=True)
+
             try:
                 completions: List[RequestOutput] = self.inference_engine.generate(
                     prompts=vllm_inputs, sampling_params=self.sampling_params
                 )
+                print(f"[DEBUG] vLLM generation completed successfully: {len(completions)} completions", file=sys.stderr, flush=True)
             except AssertionError as e:
                 # WORKAROUND: Handle vLLM multimodal cache bug (mm_hash assertion failure)
                 # If we encounter "Expected a cached item for mm_hash" error, skip this batch
                 # and return empty/padding responses to allow training to continue
-                if "Expected a cached item for mm_hash" in str(e):
-                    print(f"[WORKAROUND] Skipping batch due to mm_hash cache bug: {e}")
+                error_msg = str(e)
+                print(f"[ERROR] AssertionError caught during vLLM generation!", file=sys.stderr, flush=True)
+                print(f"[ERROR] Error message: {error_msg}", file=sys.stderr, flush=True)
+
+                if "Expected a cached item for mm_hash" in error_msg:
+                    print(f"[WORKAROUND] Skipping batch due to mm_hash cache bug: {e}", file=sys.stderr, flush=True)
 
                     # Generate empty/padding responses for this batch
                     response_ids = torch.full(
@@ -202,11 +226,19 @@ class vLLMRollout(BaseRollout):
                         },
                         batch_size=batch_size,
                     )
+                    print(f"[WORKAROUND] Returning dummy batch with padding tokens (batch_size={batch_size})", file=sys.stderr, flush=True)
                     # Return DataProto with dummy data (non_tensor_batch is already popped, should be mostly empty)
                     return DataProto(batch=batch, non_tensor_batch=non_tensor_batch)
                 else:
-                    # Re-raise if it's a different assertion error
+                    # Not the mm_hash error, re-raise the exception
+                    print(f"[ERROR] Unknown AssertionError, re-raising: {error_msg}", file=sys.stderr, flush=True)
                     raise
+            except Exception as e:
+                # Catch any other exception type during generation
+                print(f"[ERROR] Unexpected exception during vLLM generation: {type(e).__name__}", file=sys.stderr, flush=True)
+                print(f"[ERROR] Exception details: {e}", file=sys.stderr, flush=True)
+                traceback.print_exc(file=sys.stderr)
+                raise
 
         response_ids = []
         for completion in completions:
