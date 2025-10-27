@@ -47,7 +47,7 @@ python3 -m verl.trainer.main \
     worker.actor.micro_batch_size_per_device_for_update=4 \
     worker.actor.micro_batch_size_per_device_for_experience=4 \
     worker.actor.kl_loss_coef=1.0e-2 \
-    worker.actor.optim.lr=8.0e-6 \
+    worker.actor.optim.lr=1.0e-5 \
     worker.actor.max_grad_norm=5.0 \
     worker.reward.compute_score=vision_reasoner \
     trainer.experiment_name=${RUN_NAME} \
