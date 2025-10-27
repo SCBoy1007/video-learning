@@ -133,8 +133,10 @@ class RLHFDataset(Dataset):
     def _load_single_dataset(self, data_path: str):
         """
         Load a single dataset, handling both DatasetDict and direct Dataset formats
+        Also handles datasets with missing _split field in state.json
         """
         import os
+        from datasets import Dataset
 
         try:
             # Try loading as DatasetDict first (original logic)
@@ -144,6 +146,29 @@ class RLHFDataset(Dataset):
             else:
                 # If it's already a Dataset, return it directly
                 return dataset_dict
+        except KeyError as e:
+            if "'_split'" in str(e):
+                # Handle missing _split field - manually construct Dataset
+                train_path = os.path.join(data_path, 'train')
+                if os.path.exists(train_path):
+                    try:
+                        # Load using Dataset.from_file for arrow files
+                        arrow_files = [f for f in os.listdir(train_path) if f.endswith('.arrow')]
+                        if arrow_files:
+                            arrow_path = os.path.join(train_path, arrow_files[0])
+                            dataset = Dataset.from_file(arrow_path)
+                            return dataset
+                    except Exception as e3:
+                        pass
+                # If manual loading failed, try default path
+                try:
+                    return load_from_disk(train_path)
+                except Exception:
+                    pass
+            raise ValueError(
+                f"Failed to load dataset from {data_path}. "
+                f"Missing '_split' field in state.json. Error: {e}"
+            )
         except Exception as e1:
             # If that fails, try loading path/train as a Dataset
             train_path = os.path.join(data_path, 'train')
