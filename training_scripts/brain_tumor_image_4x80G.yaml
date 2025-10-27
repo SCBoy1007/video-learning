@@ -44,7 +44,7 @@ worker:
     gpu_memory_utilization: 0.4  # Conservative memory usage
     n: 8  # 8 GRPO samples per prompt
     enable_chunked_prefill: false
-    limit_images: 8  # Support 8 images per prompt (multi-slice MRI)
+    limit_images: 16  # Support 16 images per prompt (multi-slice MRI)
 
   ref:
     offload:
