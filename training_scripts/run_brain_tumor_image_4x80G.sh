@@ -44,8 +44,10 @@ python3 -m verl.trainer.main \
     data.train_files=${TRAIN_DATA} \
     data.val_files=${VAL_DATA} \
     worker.actor.model.model_path=${MODEL_PATH} \
+    worker.actor.micro_batch_size_per_device_for_update=4 \
+    worker.actor.micro_batch_size_per_device_for_experience=4 \
     worker.actor.kl_loss_coef=1.0e-2 \
-    worker.actor.optim.lr=5.0e-6 \
+    worker.actor.optim.lr=8.0e-6 \
     worker.actor.max_grad_norm=5.0 \
     worker.reward.compute_score=vision_reasoner \
     trainer.experiment_name=${RUN_NAME} \

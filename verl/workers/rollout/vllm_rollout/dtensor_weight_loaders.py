@@ -142,6 +142,14 @@ def qwen2_dtensor_weight_loader(actor_weights: Dict, vllm_model: nn.Module) -> n
 
 
 def qwen2vl_dtensor_weight_loader(actor_weights: Dict[str, torch.Tensor], vllm_model: nn.Module) -> nn.Module:
+    """
+    Weight loader for Qwen2-VL and Qwen2.5-VL models.
+
+    vLLM parameter mapping (same as Qwen3-VL):
+    - HF: model.visual.* → vLLM: visual.*
+    - HF: model.language_model.* → vLLM: language_model.model.*
+    - HF: lm_head.* → vLLM: language_model.lm_head.*
+    """
     stacked_params_mapping = [
         # (vllm_substr, hf_substr, shard_id)
         ("qkv_proj", "q_proj", "q"),
@@ -151,6 +159,7 @@ def qwen2vl_dtensor_weight_loader(actor_weights: Dict[str, torch.Tensor], vllm_m
         ("gate_up_proj", "up_proj", 1),
     ]
     vllm_params = dict(vllm_model.named_parameters(remove_duplicate=False))
+
     for actor_name, actor_weight in actor_weights.items():
         if "rotary_emb.inv_freq" in actor_name:
             continue
@@ -158,16 +167,33 @@ def qwen2vl_dtensor_weight_loader(actor_weights: Dict[str, torch.Tensor], vllm_m
         if vllm_model.config.tie_word_embeddings and "lm_head.weight" in actor_name:
             continue
 
+        # Apply vLLM's weight mapping rules (same as Qwen3-VL)
+        if actor_name.startswith("model.visual."):
+            # model.visual.* -> visual.*
+            base_name = actor_name.replace("model.visual.", "visual.")
+        elif actor_name.startswith("model.language_model."):
+            # model.language_model.* -> language_model.model.*
+            base_name = actor_name.replace("model.language_model.", "language_model.model.")
+        elif actor_name.startswith("lm_head."):
+            # lm_head.* -> language_model.lm_head.*
+            base_name = actor_name.replace("lm_head.", "language_model.lm_head.")
+        else:
+            base_name = actor_name
+
+        # Handle stacked parameters (qkv_proj, gate_up_proj)
         for vllm_substr, hf_substr, shard_id in stacked_params_mapping:
-            if hf_substr not in actor_name:
+            if hf_substr not in base_name:
                 continue
 
-            if "visual" in actor_name:
-                continue
+            if "visual" in base_name:
+                continue  # visual params don't use stacked projection
 
-            vllm_name = "language_model." + actor_name.replace(hf_substr, vllm_substr)
-            if actor_name.endswith(".bias") and actor_name not in vllm_params:
+            vllm_name = base_name.replace(hf_substr, vllm_substr)
+            if base_name.endswith(".bias") and vllm_name not in vllm_params:
                 continue  # skip loading extra bias for GPTQ models
+
+            if vllm_name not in vllm_params:
+                continue  # parameter not in vllm model
 
             local_actor_weight = redistribute_dtensor(param_name=actor_name, loaded_weights=actor_weight)
             vllm_param = vllm_params[vllm_name]
@@ -175,22 +201,18 @@ def qwen2vl_dtensor_weight_loader(actor_weights: Dict[str, torch.Tensor], vllm_m
             weight_loader(vllm_param, local_actor_weight.to(dtype=vllm_param.dtype), shard_id)
             break
         else:
-            if actor_name.endswith(".bias") and actor_name not in vllm_params:
+            # Direct parameter mapping (non-stacked)
+            if base_name.endswith(".bias") and base_name not in vllm_params:
                 continue  # skip loading extra bias for GPTQ models
 
-            if "visual" in actor_name:
-                vllm_name = actor_name
-            else:
-                vllm_name = "language_model." + actor_name
+            vllm_name = base_name
 
             # Check if parameter exists in vllm model before loading
             if vllm_name not in vllm_params:
-                # For visual parameters, the structure might differ between Qwen2/2.5/3-VL
-                # Skip if not found - this is expected for vision encoder parameters
-                # which may have different structures or be handled separately
-                if "visual" in actor_name:
+                # For visual parameters, the structure might differ
+                # Skip if not found - this is expected for some vision encoder parameters
+                if "visual" in base_name:
                     # Silently skip visual params that don't match
-                    # (vllm may have its own vision encoder structure)
                     continue
                 else:
                     raise KeyError(f"Parameter {vllm_name} not found in vllm model. Available params: {list(vllm_params.keys())[:10]}...")

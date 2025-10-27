@@ -127,13 +127,13 @@ def main():
     parser.add_argument(
         "--checkpoint_dir",
         type=str,
-        default="brain_tumor_workdir/run_brain_tumor_image_4x80G/global_step_200/actor",
+        default="brain_tumor_workdir/run_brain_tumor_image_4x80G/global_step_600/actor",
         help="FSDP checkpoint directory"
     )
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="models/Qwen3-VL-8B-BrainTumor-Step200",
+        default="models/Qwen3-VL-8B-BrainTumor-Step600",
         help="Output directory"
     )
     parser.add_argument(

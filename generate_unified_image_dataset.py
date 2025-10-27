@@ -1,30 +1,30 @@
 #!/usr/bin/env python3
 """
-Unified Image Dataset Generator for Brain Tumor Detection
+Unified Multi-Image Dataset Generator for Brain Tumor Detection
 Extracts 8 uniformly distributed slices from 3D MRI, resizes to 280×280,
-and generates Seg-Zero format annotations with tumor existence labels
+and generates multi-image samples for Qwen3-VL multi-image input
 
 Sampling Strategy:
 - 8 slices at positions: 15%, 25%, 35%, 45%, 55%, 65%, 75%, 85% of volume depth
 - Avoids first/last slices which typically contain less relevant tissue
+- All 8 slices grouped into a single sample for 3D context understanding
 
 Supports three data sources:
 - BraTS-GLI: BraTS-GLI-*/-seg.nii.gz + -t1c/t1n/t2f/t2w.nii.gz
 - MSD: imagesTr/BRATS_*.nii.gz (4D) + labelsTr/BRATS_*.nii.gz
 - MEN-RT: BraTS-MEN-RT-*/_gtv.nii.gz + _t1c.nii.gz
 
-Output format (Seg-Zero compatible):
+Output format (Multi-image):
 {
-    "id": str,                          # e.g., "BraTS-GLI-00001-t1c-slice0"
+    "id": str,                          # e.g., "BraTS-GLI-00001-t1c"
     "case_id": str,                     # e.g., "BraTS-GLI-00001-t1c"
-    "slice_idx": int,                   # 0-7 (which of the 8 slices)
-    "slice_position": float,            # 0.15-0.85 (position in volume)
-    "problem": str,                     # Task description
-    "has_tumor": bool,                  # Whether tumor exists in this slice
-    "solution": str,                    # '[{"bbox_2d": [...], "point_2d": [...]}]' or empty
-    "image": PIL.Image (280×280),
+    "problem": str,                     # Multi-slice task description
+    "has_tumor": bool,                  # Whether tumor exists in any slice
+    "solution": str,                    # '[{"slice_idx": 2, "bbox_2d": [...], "point_2d": [...]}, ...]'
+    "images": [PIL.Image],              # List of 8 PIL Images (280×280 each)
     "img_width": 280,
-    "img_height": 280
+    "img_height": 280,
+    "num_slices": 8
 }
 """
 
@@ -87,7 +87,7 @@ TUMOR_EXISTENCE_THRESHOLD = 10
 DATA_SOURCES = {
     "brats_gli_main": {
         "input_dir": "./BraTS2024-BraTS-GLI-TrainingData/training_data1_v2",
-        "output_dir": "./BraTS_GLI_Main_Image_280_MultiSlice",
+        "output_dir": "./BraTS_GLI_Main_Image_280_MultiImage",
         "modalities": ["t1c", "t1n", "t2f", "t2w"],
         "modality_names": ["T1C", "T1N", "T2F", "T2W"],
         "seg_suffix": "-seg.nii.gz",
@@ -96,7 +96,7 @@ DATA_SOURCES = {
     },
     "brats_gli_additional": {
         "input_dir": "./BraTS2024-BraTS-GLI-AdditionalTrainingData/training_data_additional",
-        "output_dir": "./BraTS_GLI_Additional_Image_280_MultiSlice",
+        "output_dir": "./BraTS_GLI_Additional_Image_280_MultiImage",
         "modalities": ["t1c", "t1n", "t2f", "t2w"],
         "modality_names": ["T1C", "T1N", "T2F", "T2W"],
         "seg_suffix": "-seg.nii.gz",
@@ -105,7 +105,7 @@ DATA_SOURCES = {
     },
     "menrt": {
         "input_dir": "./BraTS2024-MEN-RT-TrainingData/BraTS-MEN-RT-Train-v2",
-        "output_dir": "./BraTS_MEN_RT_Image_280_MultiSlice",
+        "output_dir": "./BraTS_MEN_RT_Image_280_MultiImage",
         "modalities": ["t1c"],
         "modality_names": ["T1C"],
         "seg_suffix": "_gtv.nii.gz",
@@ -115,7 +115,7 @@ DATA_SOURCES = {
     "msd": {
         "input_images": "./MSD_Task01_BrainTumour/imagesTr",
         "input_labels": "./MSD_Task01_BrainTumour/labelsTr",
-        "output_dir": "./MSD_BrainTumour_Image_280_MultiSlice",
+        "output_dir": "./MSD_BrainTumour_Image_280_MultiImage",
         "modalities": ["flair", "t1w", "t1gd", "t2w"],
         "modality_names": ["FLAIR", "T1w", "T1Gd", "T2w"],
         "pattern": "BRATS_*.nii.gz",
@@ -287,12 +287,13 @@ def extract_slice_image(
 
 def process_brats_case(
     case_dir: Path, modality: str, modality_name: str, seg_suffix: str
-) -> Optional[List[Dict]]:
+) -> Optional[Dict]:
     """
     Process BraTS-GLI or MEN-RT case - Extract 8 uniformly distributed slices
+    and combine them into a single multi-image sample
 
     Returns:
-        List of 8 dicts (one per slice), or None if case cannot be processed
+        Single dict with 8 images, or None if case cannot be processed
     """
     case_name = case_dir.name
 
@@ -323,8 +324,11 @@ def process_brats_case(
         # Create case ID
         case_id = f"{case_name}-{modality}"
 
-        # Process each slice
-        samples = []
+        # Process all 8 slices and collect results
+        images = []
+        solutions = []
+        has_any_tumor = False
+
         for slice_idx, z_pos in enumerate(slice_indices):
             # Extract segmentation mask for this slice
             seg_slice = seg_data[:, :, z_pos]
@@ -332,9 +336,12 @@ def process_brats_case(
 
             # Check if tumor exists in this slice
             has_tumor = check_tumor_existence(seg_slice)
+            if has_tumor:
+                has_any_tumor = True
 
             # Extract image
             slice_image = extract_slice_image(modality_data, z_pos, TARGET_SIZE)
+            images.append(slice_image)
 
             # Create solution based on tumor existence
             if has_tumor:
@@ -344,53 +351,58 @@ def process_brats_case(
                     bbox_scaled, point_scaled = scale_bbox_and_point(
                         bbox_orig, point_orig, orig_shape, TARGET_SIZE
                     )
-                    solution = [{"bbox_2d": bbox_scaled, "point_2d": point_scaled}]
-                else:
-                    # Mask extraction failed, treat as no tumor
-                    has_tumor = False
-                    solution = [{"bbox_2d": [0, 0, 1, 1], "point_2d": [0, 0]}]
-            else:
-                # No tumor: use degenerate bbox (area ≈ 0) at top-left corner
-                # This provides a unified format and enables continuous reward from area
-                # Area threshold in reward function will distinguish tumor vs no-tumor
-                solution = [{"bbox_2d": [0, 0, 1, 1], "point_2d": [0, 0]}]
+                    solutions.append({
+                        "slice_idx": slice_idx,
+                        "slice_position": SLICE_POSITIONS[slice_idx],
+                        "bbox_2d": bbox_scaled,
+                        "point_2d": point_scaled
+                    })
 
-            # Create problem prompt (varies by slice to add diversity)
-            if has_tumor:
-                problem_templates = [
-                    f"Does this {modality_name} MRI slice contain brain tumor? If yes, locate it.",
-                    f"Analyze this {modality_name} brain MRI. Identify tumor location if present.",
-                    f"Check for brain tumor in this {modality_name} image and provide bbox if found.",
-                    f"Examine this {modality_name} MRI slice for tumor presence and location.",
-                ]
-            else:
-                problem_templates = [
-                    f"Does this {modality_name} MRI slice contain brain tumor? If yes, locate it.",
-                    f"Analyze this {modality_name} brain MRI. Identify tumor location if present.",
-                    f"Check for brain tumor in this {modality_name} image and provide bbox if found.",
-                    f"Examine this {modality_name} MRI slice for tumor presence and location.",
-                ]
+        # Select only the slice with the LARGEST tumor (by bbox area)
+        # This ensures the model learns to identify the most prominent tumor region
+        if solutions:
+            # Calculate area for each tumor bbox
+            for sol in solutions:
+                bbox = sol["bbox_2d"]
+                sol["area"] = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
 
-            problem = problem_templates[
-                hash(f"{case_name}-{slice_idx}") % len(problem_templates)
-            ]
+            # Keep only the largest tumor
+            largest_tumor = max(solutions, key=lambda x: x["area"])
+            del largest_tumor["area"]  # Remove temporary area field
+            solutions = [largest_tumor]
+        else:
+            # No tumor in any slice: use degenerate bbox
+            solutions = [{
+                "slice_idx": 0,
+                "slice_position": SLICE_POSITIONS[0],
+                "bbox_2d": [0, 0, 1, 1],
+                "point_2d": [0, 0]
+            }]
 
-            # Create sample dict
-            sample = {
-                "id": f"{case_id}-slice{slice_idx}",
-                "case_id": case_id,
-                "slice_idx": slice_idx,
-                "slice_position": SLICE_POSITIONS[slice_idx],
-                "problem": problem,
-                "has_tumor": has_tumor,
-                "solution": json.dumps(solution),
-                "image": slice_image,
-                "img_width": TARGET_SIZE,
-                "img_height": TARGET_SIZE,
-            }
-            samples.append(sample)
+        # Create problem prompt for multi-slice analysis (find largest tumor)
+        problem_templates = [
+            f"Analyze these 8 uniformly sampled {modality_name} MRI slices. Identify the slice with the LARGEST brain tumor and locate it with bounding box and center point.",
+            f"Review these 8 {modality_name} brain MRI slices from different depths. Find the slice showing the LARGEST tumor region and provide its coordinates.",
+            f"Examine these 8 sequential {modality_name} MRI slices. Locate the LARGEST brain tumor across all slices and specify its bounding box.",
+            f"These are 8 {modality_name} MRI slices covering the brain volume. Identify which slice contains the LARGEST tumor and provide its 2D coordinates.",
+        ]
 
-        return samples
+        problem = problem_templates[hash(case_name) % len(problem_templates)]
+
+        # Create single sample with all 8 images
+        sample = {
+            "id": case_id,
+            "case_id": case_id,
+            "problem": problem,
+            "has_tumor": has_any_tumor,
+            "solution": json.dumps(solutions),
+            "images": images,  # List of 8 PIL Images
+            "img_width": TARGET_SIZE,
+            "img_height": TARGET_SIZE,
+            "num_slices": NUM_SLICES,
+        }
+
+        return sample
 
     except Exception as e:
         print(f"Error processing {case_name}-{modality}: {e}")
@@ -403,12 +415,13 @@ def process_msd_case(
     modality_name: str,
     images_dir: Path,
     labels_dir: Path,
-) -> Optional[List[Dict]]:
+) -> Optional[Dict]:
     """
     Process MSD case (4D data) - Extract 8 uniformly distributed slices
+    and combine them into a single multi-image sample
 
     Returns:
-        List of 8 dicts (one per slice), or None if case cannot be processed
+        Single dict with 8 images, or None if case cannot be processed
     """
     try:
         # Load segmentation
@@ -433,8 +446,11 @@ def process_msd_case(
         # Create case ID
         case_id = f"{case_name}-{modality_name.lower()}"
 
-        # Process each slice
-        samples = []
+        # Process all 8 slices and collect results
+        images = []
+        solutions = []
+        has_any_tumor = False
+
         for slice_idx, z_pos in enumerate(slice_indices):
             # Extract segmentation mask for this slice
             seg_slice = seg_data[:, :, z_pos]
@@ -442,9 +458,12 @@ def process_msd_case(
 
             # Check if tumor exists in this slice
             has_tumor = check_tumor_existence(seg_slice)
+            if has_tumor:
+                has_any_tumor = True
 
             # Extract image
             slice_image = extract_slice_image(modality_data, z_pos, TARGET_SIZE)
+            images.append(slice_image)
 
             # Create solution based on tumor existence
             if has_tumor:
@@ -454,42 +473,58 @@ def process_msd_case(
                     bbox_scaled, point_scaled = scale_bbox_and_point(
                         bbox_orig, point_orig, orig_shape, TARGET_SIZE
                     )
-                    solution = [{"bbox_2d": bbox_scaled, "point_2d": point_scaled}]
-                else:
-                    # Mask extraction failed, treat as no tumor
-                    has_tumor = False
-                    solution = [{"bbox_2d": [0, 0, 1, 1], "point_2d": [0, 0]}]
-            else:
-                # No tumor: use degenerate bbox (unified format)
-                solution = [{"bbox_2d": [0, 0, 1, 1], "point_2d": [0, 0]}]
+                    solutions.append({
+                        "slice_idx": slice_idx,
+                        "slice_position": SLICE_POSITIONS[slice_idx],
+                        "bbox_2d": bbox_scaled,
+                        "point_2d": point_scaled
+                    })
 
-            # Create problem prompt (same templates as BraTS)
-            problem_templates = [
-                f"Does this {modality_name} MRI slice contain brain tumor? If yes, locate it.",
-                f"Analyze this {modality_name} brain MRI. Identify tumor location if present.",
-                f"Check for brain tumor in this {modality_name} image and provide bbox if found.",
-                f"Examine this {modality_name} MRI slice for tumor presence and location.",
-            ]
-            problem = problem_templates[
-                hash(f"{case_name}-{slice_idx}") % len(problem_templates)
-            ]
+        # Select only the slice with the LARGEST tumor (by bbox area)
+        # This ensures the model learns to identify the most prominent tumor region
+        if solutions:
+            # Calculate area for each tumor bbox
+            for sol in solutions:
+                bbox = sol["bbox_2d"]
+                sol["area"] = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
 
-            # Create sample dict
-            sample = {
-                "id": f"{case_id}-slice{slice_idx}",
-                "case_id": case_id,
-                "slice_idx": slice_idx,
-                "slice_position": SLICE_POSITIONS[slice_idx],
-                "problem": problem,
-                "has_tumor": has_tumor,
-                "solution": json.dumps(solution),
-                "image": slice_image,
-                "img_width": TARGET_SIZE,
-                "img_height": TARGET_SIZE,
-            }
-            samples.append(sample)
+            # Keep only the largest tumor
+            largest_tumor = max(solutions, key=lambda x: x["area"])
+            del largest_tumor["area"]  # Remove temporary area field
+            solutions = [largest_tumor]
+        else:
+            # No tumor in any slice: use degenerate bbox
+            solutions = [{
+                "slice_idx": 0,
+                "slice_position": SLICE_POSITIONS[0],
+                "bbox_2d": [0, 0, 1, 1],
+                "point_2d": [0, 0]
+            }]
 
-        return samples
+        # Create problem prompt for multi-slice analysis (find largest tumor)
+        problem_templates = [
+            f"Analyze these 8 uniformly sampled {modality_name} MRI slices. Identify the slice with the LARGEST brain tumor and locate it with bounding box and center point.",
+            f"Review these 8 {modality_name} brain MRI slices from different depths. Find the slice showing the LARGEST tumor region and provide its coordinates.",
+            f"Examine these 8 sequential {modality_name} MRI slices. Locate the LARGEST brain tumor across all slices and specify its bounding box.",
+            f"These are 8 {modality_name} MRI slices covering the brain volume. Identify which slice contains the LARGEST tumor and provide its 2D coordinates.",
+        ]
+
+        problem = problem_templates[hash(case_name) % len(problem_templates)]
+
+        # Create single sample with all 8 images
+        sample = {
+            "id": case_id,
+            "case_id": case_id,
+            "problem": problem,
+            "has_tumor": has_any_tumor,
+            "solution": json.dumps(solutions),
+            "images": images,  # List of 8 PIL Images
+            "img_width": TARGET_SIZE,
+            "img_height": TARGET_SIZE,
+            "num_slices": NUM_SLICES,
+        }
+
+        return sample
 
     except Exception as e:
         print(f"Error processing {case_name}-{modality_name}: {e}")
@@ -525,7 +560,7 @@ def check_dataset_exists(output_dir: Path, modality_name: str) -> bool:
     Check if dataset already exists and is complete
 
     Returns:
-        True if dataset exists with all 8 shards, False otherwise
+        True if dataset exists with required files, False otherwise
     """
     modality_dir = output_dir / modality_name
     train_dir = modality_dir / "train"
@@ -534,15 +569,9 @@ def check_dataset_exists(output_dir: Path, modality_name: str) -> bool:
     if not train_dir.exists():
         return False
 
-    # Check for all 8 arrow files
-    expected_shards = [
-        f"data-{i:05d}-of-{NUM_SLICES:05d}.arrow"
-        for i in range(NUM_SLICES)
-    ]
-
-    for shard in expected_shards:
-        if not (train_dir / shard).exists():
-            return False
+    # Check for the single arrow file
+    if not (train_dir / "data-00000-of-00001.arrow").exists():
+        return False
 
     # Check for metadata files
     required_files = [
@@ -636,7 +665,7 @@ def process_data_source(source_name: str, config: Dict, state: ProcessingState):
 
             if summary["total_samples"] > 0:
                 print(
-                    f"  ✅ {modality_name}: {valid_cases} cases × {NUM_SLICES} slices = {summary['total_samples']} samples"
+                    f"  ✅ {modality_name}: {valid_cases} cases (each with {NUM_SLICES} slices) = {summary['total_samples']} multi-image samples"
                 )
             else:
                 print(f"  ⚠️  {modality_name}: No valid samples")
@@ -709,7 +738,7 @@ def process_data_source(source_name: str, config: Dict, state: ProcessingState):
 
             if summary["total_samples"] > 0:
                 print(
-                    f"  ✅ {modality_name}: {valid_cases} cases × {NUM_SLICES} slices = {summary['total_samples']} samples"
+                    f"  ✅ {modality_name}: {valid_cases} cases (each with {NUM_SLICES} slices) = {summary['total_samples']} multi-image samples"
                 )
             else:
                 print(f"  ⚠️  {modality_name}: No valid samples")
@@ -721,7 +750,7 @@ def process_data_source(source_name: str, config: Dict, state: ProcessingState):
 
 
 class IncrementalSliceDatasetWriter:
-    """Incremental writer that streams samples to Arrow shards to keep memory usage low."""
+    """Incremental writer that streams multi-image samples to Arrow format."""
 
     def __init__(self, output_base: str, modality_name: str):
         self.output_dir = Path(output_base) / modality_name
@@ -730,116 +759,74 @@ class IncrementalSliceDatasetWriter:
 
         print(f"    💾 Saving to: {self.output_dir}")
 
+        # Updated schema for multi-image samples
         self.features = Features(
             {
                 "id": Value("string"),
                 "case_id": Value("string"),
-                "slice_idx": Value("int64"),
-                "slice_position": Value("float32"),
                 "problem": Value("string"),
                 "has_tumor": Value("bool"),
                 "solution": Value("string"),
-                "image": DatasetImage(),
+                "images": [DatasetImage()],  # List of 8 images
                 "img_width": Value("int64"),
                 "img_height": Value("int64"),
+                "num_slices": Value("int64"),
             }
         )
 
-        self.slice_stats = [
-            {
-                "tumor": 0,
-                "no_tumor": 0,
-                "num_examples": 0,
-                "size_bytes": 0,
-                "shard_name": f"data-{idx:05d}-of-{NUM_SLICES:05d}.arrow",
-            }
-            for idx in range(NUM_SLICES)
-        ]
+        # Single shard for all samples
+        self.shard_name = "data-00000-of-00001.arrow"
+        self.writer = ArrowWriter(
+            features=self.features,
+            path=str(self.train_dir / self.shard_name),
+            writer_batch_size=32,
+        )
 
-        self.writers = {
-            idx: ArrowWriter(
-                features=self.features,
-                path=str(self.train_dir / stats["shard_name"]),
-                writer_batch_size=32,
-            )
-            for idx, stats in enumerate(self.slice_stats)
-        }
-
+        self.num_tumor = 0
+        self.num_no_tumor = 0
         self.total_bytes = 0
         self.total_samples = 0
         self.has_written = False
 
-    def write_samples(self, samples: List[Dict]):
-        """Append a batch of samples returned by a worker."""
-        if not samples:
+    def write_samples(self, sample: Optional[Dict]):
+        """Write a single multi-image sample."""
+        if not sample:
             return
 
         self.has_written = True
+        self.writer.write(sample)
+        self.total_samples += 1
 
-        for sample in samples:
-            slice_idx = sample["slice_idx"]
-            self.writers[slice_idx].write(sample)
-
-            if sample["has_tumor"]:
-                self.slice_stats[slice_idx]["tumor"] += 1
-            else:
-                self.slice_stats[slice_idx]["no_tumor"] += 1
+        if sample["has_tumor"]:
+            self.num_tumor += 1
+        else:
+            self.num_no_tumor += 1
 
     def finalize(self) -> Dict[str, Any]:
-        """Finalize all shard writers and write dataset metadata."""
-        shard_files: List[str] = []
-        total_bytes = 0
-        total_samples = 0
+        """Finalize writer and write dataset metadata."""
+        num_examples, num_bytes = self.writer.finalize()
 
-        for slice_idx, stats in enumerate(self.slice_stats):
-            num_examples, num_bytes = self.writers[slice_idx].finalize()
-            stats["num_examples"] = num_examples
-            stats["size_bytes"] = num_bytes
+        self.total_bytes = num_bytes
+        self.total_samples = num_examples
 
-            if num_examples > 0:
-                shard_files.append(stats["shard_name"])
+        shard_files = [self.shard_name] if num_examples > 0 else []
+        self._write_metadata(shard_files, num_bytes, num_examples)
 
-            total_bytes += num_bytes
-            total_samples += num_examples
-
-        self.total_bytes = total_bytes
-        self.total_samples = total_samples
-
-        self._write_metadata(shard_files, total_bytes, total_samples)
-
-        for slice_idx, stats in enumerate(self.slice_stats):
-            num_examples = stats["num_examples"]
-            if num_examples == 0:
-                print(f"    ⚠️  Slice {slice_idx}: No samples")
-                continue
-
-            shard_size_mb = stats["size_bytes"] / (1024 * 1024)
-            num_tumor = stats["tumor"]
-            num_no_tumor = stats["no_tumor"]
-
-            print(
-                f"    📊 Slice {slice_idx} (pos={SLICE_POSITIONS[slice_idx]:.2f}): "
-                f"{num_examples} samples "
-                f"(✓ {num_tumor} tumor, ✗ {num_no_tumor} no-tumor) - "
-                f"{shard_size_mb:.1f} MB"
-            )
-
-        total_size_mb = total_bytes / (1024 * 1024)
-        print(f"    📦 Total: {total_samples} samples, {total_size_mb:.2f} MB")
-        print(
-            f"    📁 Shards: {len(shard_files)} files (data-00000 to data-{NUM_SLICES-1:05d})"
-        )
+        total_size_mb = num_bytes / (1024 * 1024)
+        print(f"    📦 Total: {num_examples} multi-image samples (each with {NUM_SLICES} slices)")
+        print(f"    📊 Statistics: ✓ {self.num_tumor} with tumor, ✗ {self.num_no_tumor} without tumor")
+        print(f"    💾 Size: {total_size_mb:.2f} MB")
 
         return {
             "shard_files": shard_files,
-            "total_samples": total_samples,
+            "total_samples": num_examples,
             "total_size_mb": total_size_mb,
         }
 
     def _write_metadata(
         self, shard_files: List[str], total_bytes: int, total_samples: int
     ) -> None:
-        """Write dataset metadata files expected by the Seg-Zero tooling."""
+        """Write dataset metadata files for multi-image format."""
         with open(self.output_dir / "dataset_dict.json", "w") as f:
             json.dump({"splits": ["train"]}, f)
 
@@ -847,14 +834,13 @@ class IncrementalSliceDatasetWriter:
             "features": {
                 "id": {"dtype": "string", "_type": "Value"},
                 "case_id": {"dtype": "string", "_type": "Value"},
-                "slice_idx": {"dtype": "int64", "_type": "Value"},
-                "slice_position": {"dtype": "float32", "_type": "Value"},
                 "problem": {"dtype": "string", "_type": "Value"},
                 "has_tumor": {"dtype": "bool", "_type": "Value"},
                 "solution": {"dtype": "string", "_type": "Value"},
-                "image": {"_type": "Image"},
+                "images": {"feature": {"_type": "Image"}, "_type": "Sequence"},
                 "img_width": {"dtype": "int64", "_type": "Value"},
                 "img_height": {"dtype": "int64", "_type": "Value"},
+                "num_slices": {"dtype": "int64", "_type": "Value"},
             },
             "splits": {
                 "train": {
@@ -869,7 +855,15 @@ class IncrementalSliceDatasetWriter:
             json.dump(dataset_info, f, indent=2)
 
         with open(self.train_dir / "state.json", "w") as f:
-            json.dump({"_data_files": [{"filename": f} for f in shard_files]}, f, indent=2)
+            json.dump({
+                "_data_files": [{"filename": f} for f in shard_files],
+                "_fingerprint": None,
+                "_format_columns": None,
+                "_format_kwargs": {},
+                "_format_type": None,
+                "_output_all_columns": False,
+                "_split": "train"
+            }, f, indent=2)
 
 
 def _normalize_limit(value: Optional[int]) -> Optional[int]:
@@ -950,18 +944,18 @@ def main():
     print(f"\n{'='*80}")
     print("🎉 ALL DATA SOURCES PROCESSED")
     print(f"{'='*80}")
-    print("\n✅ Datasets ready for training!")
-    print("   Format: Seg-Zero compatible with existence detection")
+    print("\n✅ Datasets ready for multi-image training with Qwen3-VL!")
+    print("   Format: Multi-image format (8 slices per sample)")
     print("   Fields:")
-    print("     - id: Unique sample identifier")
-    print("     - case_id: Parent case identifier")
-    print("     - slice_idx: Slice position index (0-7)")
-    print("     - slice_position: Normalized position in volume (0.15-0.85)")
-    print("     - problem: Task description")
-    print("     - has_tumor: Boolean indicating tumor presence")
-    print("     - solution: JSON with bbox_2d and point_2d (if has_tumor=True)")
-    print("     - image: 280×280 RGB slice")
-    print("   Storage: Each slice position saved in separate subdirectory")
+    print("     - id: Unique case identifier")
+    print("     - case_id: Case identifier")
+    print("     - problem: Multi-slice analysis task description")
+    print("     - has_tumor: Boolean indicating tumor presence in any slice")
+    print("     - solution: JSON list with slice_idx, bbox_2d, and point_2d for each tumor slice")
+    print("     - images: List of 8 PIL Images (280×280 RGB)")
+    print("     - img_width, img_height: Image dimensions (280×280)")
+    print("     - num_slices: Number of slices (8)")
+    print("   Storage: Single Arrow file per modality with multi-image samples")
 
 
 if __name__ == "__main__":

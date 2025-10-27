@@ -117,11 +117,19 @@ def vision_reasoner_accuracy_reward(predict_str: str, ground_truth: str, image_s
             l1_matrix = batch_l1_distance(pred_bboxes, gt_bboxes)  # (M,N)
             points_dist_matrix = batch_points_distance(pred_points, gt_points)  # (M,N)
             points_in_box = batch_points_in_box(pred_points, pred_bboxes)  # (M,)
-            
-            # 计算reward矩阵
-            iou_reward = (iou_matrix > 0.5).astype(float)
-            bbox_l1_reward = (l1_matrix < 10).astype(float)
-            point_reward = ((points_dist_matrix < 30) & points_in_box[:,np.newaxis]).astype(float)
+
+            # 计算reward矩阵 - 使用平滑函数替代硬阈值
+            # IoU reward: 平滑从0到1，在IoU=0.5时达到0.5分，IoU=1.0时满分
+            iou_reward = np.clip(iou_matrix, 0, 1)  # 直接使用IoU值作为reward (0-1分)
+
+            # Bbox L1 distance reward: 距离越小reward越高，使用指数衰减
+            # distance=0时满分1.0，distance=10时约0.37，distance=20时约0.14
+            bbox_l1_reward = np.exp(-l1_matrix / 10.0)  # 平滑衰减 (0-1分)
+
+            # Point distance reward: 距离越小reward越高，同样使用指数衰减
+            # distance=0时满分，distance=30时约0.37，只有点在框内才给分
+            point_in_box_mask = points_in_box[:,np.newaxis].astype(float)
+            point_reward = np.exp(-points_dist_matrix / 30.0) * point_in_box_mask  # 平滑衰减 (0-1分)
             
             # 构建最终的cost矩阵
             cost_matrix = 3.0 - (iou_reward + bbox_l1_reward + point_reward)
