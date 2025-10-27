@@ -3,7 +3,7 @@ data:
   train_files: None  # Set in shell script
   val_files: None    # Set in shell script
   prompt_key: problem
-  max_prompt_length: 1300  # Standard image prompt length
+  max_prompt_length: 2600  # Increased for 16-image input (double of 1300)
   max_response_length: 2000
   rollout_batch_size: 32  # Double batch size for faster training
   shuffle: true
