@@ -180,20 +180,20 @@ def create_prompt(problem: str, image_size: int, system_prompt: str, num_images:
             f'<answer>[{{"bbox_2d": [10,100,200,210], "point_2d": [120,155]}}]</answer>'
         )
     else:
-        # Multi-image prompt (8 slices)
-        image_tags = "\n".join([f"<image>" for _ in range(num_images)])
+        # Multi-image prompt - MUST match training prompt exactly for consistency
+        image_tags = "<image>" * num_images
         user_prompt = (
             f"{image_tags}\n"
             f"Task: {problem}\n\n"
             f"Instructions:\n"
-            f"1. You are viewing {num_images} consecutive MRI slices of the same patient's brain scan.\n"
-            f"2. These slices show the brain from different depths. Analyze ALL slices together to understand the 3D tumor structure.\n"
-            f"3. Brain tumors typically appear as areas with altered intensity (brighter or darker regions) or irregular shapes across multiple slices.\n"
-            f"4. Locate the main tumor region visible across these slices and determine its 2D bounding box [x_min, y_min, x_max, y_max] and center point [x, y].\n"
+            f"1. You are viewing {num_images} MRI slices sampled uniformly from a 3D brain scan (from shallow to deep).\n"
+            f"2. Each slice may contain brain tumor with varying sizes. Your task is to identify the slice with the LARGEST tumor.\n"
+            f"3. Brain tumors typically appear as areas with altered intensity (brighter or darker regions) or irregular shapes.\n"
+            f"4. Locate the largest tumor region and determine its 2D bounding box [x_min, y_min, x_max, y_max] and center point [x, y].\n"
             f"5. Use normalized coordinates in range [0, 1000] for bbox_2d and point_2d.\n"
             f"6. Output your analysis in <think></think> tags, then provide the final answer in <answer></answer> tags.\n\n"
             f"Output format example:\n"
-            f"<think>Analyzing {num_images} slices: Slice 1 shows..., Slice 2 reveals..., the tumor appears to be located at...</think>\n"
+            f"<think>Analyzing all {num_images} slices... Slice {num_images//2} shows the largest tumor region...</think>\n"
             f'<answer>[{{"bbox_2d": [10,100,200,210], "point_2d": [120,155]}}]</answer>'
         )
 

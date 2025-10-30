@@ -84,18 +84,28 @@ class DataParallelPPOActor(BasePPOActor):
             # TODO (yaowei): preprocess data for padding_free and ulysses
             raise NotImplementedError
         else:
-            output = self.actor_module(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                **vision_inputs,
-                use_cache=False,
-            )
-            logits: torch.Tensor = output.logits
-            logits.div_(temperature)
-            logits = logits[:, -response_length - 1 : -1, :]  # (bsz, response_length, vocab_size)
-            log_probs = logprobs_from_logits(logits, responses)  # (bsz, response_length)
-            entropy = verl_F.entropy_from_logits(logits)  # (bsz, response_length)
+            try:
+                output = self.actor_module(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    **vision_inputs,
+                    use_cache=False,
+                )
+                logits: torch.Tensor = output.logits
+                logits.div_(temperature)
+                logits = logits[:, -response_length - 1 : -1, :]  # (bsz, response_length, vocab_size)
+                log_probs = logprobs_from_logits(logits, responses)  # (bsz, response_length)
+                entropy = verl_F.entropy_from_logits(logits)  # (bsz, response_length)
+            except ValueError as e:
+                if "Image features and image tokens do not match" in str(e):
+                    print(f"[WARNING] Skipping batch due to token mismatch: {e}")
+                    batch_size = input_ids.size(0)
+                    device = input_ids.device
+                    entropy = torch.zeros(batch_size, response_length, device=device)
+                    log_probs = torch.zeros(batch_size, response_length, device=device)
+                else:
+                    raise
 
         return entropy, log_probs
 

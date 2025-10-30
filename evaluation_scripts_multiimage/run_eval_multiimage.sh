@@ -8,12 +8,18 @@ set -e
 # Configuration
 # ============================================================================
 
-# Model path - default to Step 600 checkpoint
-MODEL_PATH="${MODEL_PATH:-models/Qwen3-VL-8B-BrainTumor-Step600}"
+# Model path - default to T1C Step 350 checkpoint
+MODEL_PATH="${MODEL_PATH:-models/Qwen3-VL-8B-BrainTumor-T1C-Step350}"
 
-# Validation datasets (MultiImage version for 8-slice evaluation)
+# Validation datasets (BraTS MultiImage 8-slice - Main and Additional, T1N and T2F)
+# Main: Training set patients (cross-modality generalization on seen patients)
+# Additional: Validation set patients (cross-modality generalization on unseen patients)
+# T1N: T1 Native (no contrast) - tests brightness inversion generalization
+# T2F: T2 FLAIR - tests cross-sequence generalization
 DATASETS=(
-    "data/BraTS_GLI_Additional_Image_280_MultiImage/T1C"
+    "data/BraTS_GLI_Main_Image_280_MultiImage/T1N"
+    "data/BraTS_GLI_Main_Image_280_MultiImage/T2F"
+    "data/BraTS_GLI_Additional_Image_280_MultiImage/T1N"
     "data/BraTS_GLI_Additional_Image_280_MultiImage/T2F"
 )
 
@@ -22,11 +28,11 @@ OUTPUT_DIR="${OUTPUT_DIR:-eval_results_multiimage/$(basename $MODEL_PATH)_$(date
 
 # Multi-image evaluation parameters
 NUM_IMAGES=8  # Multi-image mode (8 slices)
-BATCH_SIZE=8  # Increased from 4 for better GPU utilization (was ~50%)
+BATCH_SIZE=8  # Can use larger batch for 8 images
 IMAGE_SIZE=280
 MAX_SAMPLES=""  # Set to a number for quick testing
 
-# GPU configuration - use all 4 GPUs in parallel
+# GPU configuration - use all 4 GPUs for 4 modalities
 NUM_GPUS=4
 GPUS=(0 1 2 3)
 
@@ -49,11 +55,11 @@ print_info() {
 # Main Execution
 # ============================================================================
 
-print_header "Multi-GPU Multi-Image Brain Tumor Evaluation"
+print_header "Multi-GPU 8-Slice Brain Tumor Evaluation"
 
 print_info "Model: $MODEL_PATH"
 print_info "Output directory: $OUTPUT_DIR"
-print_info "Images per sample: $NUM_IMAGES (multi-image mode)"
+print_info "Images per sample: $NUM_IMAGES (8-slice multi-image mode)"
 print_info "Batch size: $BATCH_SIZE"
 print_info "Image size: ${IMAGE_SIZE}x${IMAGE_SIZE}"
 print_info "GPUs: ${GPUS[@]} (${NUM_GPUS} GPUs in parallel)"
@@ -244,6 +250,6 @@ echo "  bash evaluation_scripts_multiimage/run_eval_multiimage.sh"
 print_info ""
 print_info "To change number of images (for ablation):"
 echo "  # Edit NUM_IMAGES in the script (default=8)"
-echo "  # Options: 1 (single-image), 2, 4, 8 (multi-image)"
+echo "  # Options: 1 (single-image), 2, 4, 8, 16 (multi-image)"
 
 print_header "Done"
