@@ -40,8 +40,8 @@ def parse_args():
                         help="Directory to save evaluation results")
     parser.add_argument("--batch_size", type=int, default=8,
                         help="Batch size for inference")
-    parser.add_argument("--max_new_tokens", type=int, default=512,
-                        help="Maximum tokens to generate")
+    parser.add_argument("--max_new_tokens", type=int, default=2048,
+                        help="Maximum tokens to generate (increased for 8-image inputs, prevents truncation)")
     parser.add_argument("--image_size", type=int, default=280,
                         help="Image size (280 or 840)")
     parser.add_argument("--system_prompt", type=str, default="You are a helpful assistant.",
@@ -119,8 +119,11 @@ def check_format(output_text: str) -> Dict[str, float]:
     scores = {}
 
     # Check think tag
-    think_pattern = r'<think>.*?</think>'
-    scores['has_think'] = 1.0 if re.search(think_pattern, output_text, re.DOTALL) else 0.0
+    # Note: Chat template adds '<think>' prefix, so model output may start without it
+    # Check for either complete <think>...</think> OR just </think> (chat template handles opening)
+    has_complete_think = bool(re.search(r'<think>.*?</think>', output_text, re.DOTALL))
+    has_think_close = '</think>' in output_text
+    scores['has_think'] = 1.0 if (has_complete_think or has_think_close) else 0.0
 
     # Check answer tag with JSON
     answer_pattern = r'<answer>\s*\[.*?\]\s*</answer>'
@@ -173,7 +176,7 @@ def create_prompt(problem: str, image_size: int, system_prompt: str, num_images:
             f"1. This is a brain MRI scan. Look for abnormal regions that appear different from normal brain tissue.\n"
             f"2. Brain tumors typically appear as areas with altered intensity (brighter or darker regions) or irregular shapes.\n"
             f"3. Locate the tumor region and determine its 2D bounding box [x_min, y_min, x_max, y_max] and center point [x, y].\n"
-            f"4. Use normalized coordinates in range [0, 1000] for bbox_2d and point_2d.\n"
+            f"4. Output coordinates in pixel format directly (do not calculate or convert).\n"
             f"5. Output your analysis in <think></think> tags, then provide the final answer in <answer></answer> tags.\n\n"
             f"Output format example:\n"
             f"<think>Analysis of the image shows...</think>\n"
@@ -190,7 +193,7 @@ def create_prompt(problem: str, image_size: int, system_prompt: str, num_images:
             f"2. Each slice may contain brain tumor with varying sizes. Your task is to identify the slice with the LARGEST tumor.\n"
             f"3. Brain tumors typically appear as areas with altered intensity (brighter or darker regions) or irregular shapes.\n"
             f"4. Locate the largest tumor region and determine its 2D bounding box [x_min, y_min, x_max, y_max] and center point [x, y].\n"
-            f"5. Use normalized coordinates in range [0, 1000] for bbox_2d and point_2d.\n"
+            f"5. Output coordinates in pixel format directly (do not calculate or convert). For example, if the tumor is at pixel location (150, 200), output [150, 200].\n"
             f"6. Output your analysis in <think></think> tags, then provide the final answer in <answer></answer> tags.\n\n"
             f"Output format example:\n"
             f"<think>Analyzing all {num_images} slices... Slice {num_images//2} shows the largest tumor region...</think>\n"

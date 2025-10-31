@@ -1,6 +1,6 @@
 #!/bin/bash
 # Multi-GPU Parallel Multi-Image (8-slice) Brain Tumor Evaluation Script
-# Evaluates models on 8-slice MRI inputs using all available GPUs
+# Evaluates models on 8-slice MRI inputs using all available GPUs (4 modalities)
 
 set -e
 
@@ -8,23 +8,24 @@ set -e
 # Configuration
 # ============================================================================
 
-# Model path - default to T1C Step 350 checkpoint
+# Model path - Step 400 trained model (4 modalities, 1e-5 learning rate)
 MODEL_PATH="${MODEL_PATH:-models/Qwen3-VL-8B-BrainTumor-T1C-Step350}"
 
-# Validation datasets (BraTS MultiImage 8-slice - Main and Additional, T1N and T2F)
-# Main: Training set patients (cross-modality generalization on seen patients)
+# Validation datasets (BraTS Additional MultiImage - All 4 modalities)
 # Additional: Validation set patients (cross-modality generalization on unseen patients)
+# T1C: T1 Contrast-enhanced - primary training modality
 # T1N: T1 Native (no contrast) - tests brightness inversion generalization
 # T2F: T2 FLAIR - tests cross-sequence generalization
+# T2W: T2 Weighted - tests cross-sequence generalization
 DATASETS=(
-    "data/BraTS_GLI_Main_Image_280_MultiImage/T1N"
-    "data/BraTS_GLI_Main_Image_280_MultiImage/T2F"
+    "data/BraTS_GLI_Additional_Image_280_MultiImage/T1C"
     "data/BraTS_GLI_Additional_Image_280_MultiImage/T1N"
     "data/BraTS_GLI_Additional_Image_280_MultiImage/T2F"
+    "data/BraTS_GLI_Additional_Image_280_MultiImage/T2W"
 )
 
 # Output directory
-OUTPUT_DIR="${OUTPUT_DIR:-eval_results_multiimage/$(basename $MODEL_PATH)_$(date +%Y%m%d_%H%M%S)}"
+OUTPUT_DIR="${OUTPUT_DIR:-eval_results_multiimage/$(basename $MODEL_PATH)_8slice_$(date +%Y%m%d_%H%M%S)}"
 
 # Multi-image evaluation parameters
 NUM_IMAGES=8  # Multi-image mode (8 slices)
@@ -32,7 +33,7 @@ BATCH_SIZE=8  # Can use larger batch for 8 images
 IMAGE_SIZE=280
 MAX_SAMPLES=""  # Set to a number for quick testing
 
-# GPU configuration - use all 4 GPUs for 4 modalities
+# GPU configuration - use 4 GPUs for 4 modalities (one GPU per modality)
 NUM_GPUS=4
 GPUS=(0 1 2 3)
 
@@ -55,7 +56,7 @@ print_info() {
 # Main Execution
 # ============================================================================
 
-print_header "Multi-GPU 8-Slice Brain Tumor Evaluation"
+print_header "Multi-GPU 8-Slice Brain Tumor Evaluation (4 Modalities)"
 
 print_info "Model: $MODEL_PATH"
 print_info "Output directory: $OUTPUT_DIR"
